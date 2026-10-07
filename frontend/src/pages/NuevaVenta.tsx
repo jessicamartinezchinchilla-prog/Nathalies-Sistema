@@ -1,195 +1,190 @@
-import { useState } from "react";
-import { Card, SectionHeader, Button, Input, Badge } from "../components/ui";
+import { useState, useEffect } from "react";
+import { Card, Button } from "../components/ui";
 
-// Tipos
-type ItemDisponible = {
-  id: string;
-  nombre: string;
-  precio: number;
-  tipo: "Servicio" | "Producto";
-  stock?: number; // Solo para productos
-};
-
-type ItemCarrito = ItemDisponible & {
-  cantidad: number;
-};
-
-// Datos de prueba (Catálogo)
-const catalogo: ItemDisponible[] = [
-  { id: "S1", nombre: "Uñas acrílicas completas", precio: 25.00, tipo: "Servicio" },
-  { id: "S2", nombre: "Manicure clásico", precio: 15.00, tipo: "Servicio" },
-  { id: "S3", nombre: "Lifting de pestañas", precio: 35.00, tipo: "Servicio" },
-  { id: "P1", nombre: "Shampoo reparador", precio: 12.00, tipo: "Producto", stock: 8 },
-  { id: "P2", nombre: "Pulsera acrílica", precio: 5.00, tipo: "Producto", stock: 20 },
-  { id: "P3", nombre: "Esmalte semipermanente", precio: 18.00, tipo: "Producto", stock: 5 },
-];
+// ... (Mantén los tipos Producto, Servicio, ItemCarrito igual que antes) ...
+type Producto = { id: number; codigo: string; nombre: string; precio_venta: string | number; stock: number; };
+type Servicio = { id: number; codigo: string; nombre: string; precio: string | number; };
+type ItemCarrito = { id: string; tipo: 'producto' | 'servicio'; item_id: number; codigo: string; nombre: string; cantidad: number; precio: number; subtotal: number; };
 
 export default function NuevaVenta() {
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [servicios, setServicios] = useState<Servicio[]>([]);
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [busqueda, setBusqueda] = useState("");
-  const [metodoPago, setMetodoPago] = useState("Efectivo");
-  const [mostrarExito, setMostrarExito] = useState(false);
+  const [metodoPago, setMetodoPago] = useState<"Efectivo" | "Transferencia">("Efectivo");
+  const [montoRecibido, setMontoRecibido] = useState("");
+  const [loading, setLoading] = useState(false);
+  
+  // Modales
+  const [modalExito, setModalExito] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
 
-  // Filtrar catálogo
-  const resultados = catalogo.filter((item) =>
-    item.nombre.toLowerCase().includes(busqueda.toLowerCase())
-  );
+  useEffect(() => { cargarProductos(); cargarServicios(); }, []);
 
-  // Agregar al carrito
-  const agregarAlCarrito = (item: ItemDisponible) => {
-    setCarrito((prev) => {
-      const existe = prev.find((p) => p.id === item.id);
-      if (existe) {
-        return prev.map((p) => (p.id === item.id ? { ...p, cantidad: p.cantidad + 1 } : p));
+  const cargarProductos = async () => {
+    try {
+      const res = await fetch("http://localhost:8000/api/productos/listar_activos.php");
+      const data = await res.json();
+      if (data.success) setProductos(data.productos || []);
+    } catch (err) { setModalError("Error al cargar productos"); }
+  };
+
+  const cargarServicios = async () => {
+    try {
+      const res = await fetch("http://localhost:8000/api/servicios/listar_activos.php");
+      const data = await res.json();
+      if (data.success) setServicios(data.servicios || []);
+    } catch (err) { setModalError("Error al cargar servicios"); }
+  };
+
+  const agregarAlCarrito = (tipo: 'producto' | 'servicio', item: any) => {
+    const id = `${tipo}-${item.id}`;
+    const existe = carrito.find(i => i.id === id);
+    const precioReal = Number(tipo === 'producto' ? item.precio_venta : item.precio);
+
+    if (existe) {
+      if (tipo === 'producto' && existe.cantidad >= item.stock) {
+        setModalError(`Stock insuficiente para ${item.nombre}`);
+        return;
       }
-      return [...prev, { ...item, cantidad: 1 }];
-    });
-    setBusqueda(""); // Limpiar búsqueda
+      setCarrito(carrito.map(i => i.id === id ? { ...i, cantidad: i.cantidad + 1, subtotal: (i.cantidad + 1) * precioReal } : i));
+    } else {
+      setCarrito([...carrito, { id, tipo, item_id: item.id, codigo: item.codigo, nombre: item.nombre, cantidad: 1, precio: precioReal, subtotal: precioReal }]);
+    }
+    setBusqueda("");
   };
 
-  // Cambiar cantidad
-  const cambiarCantidad = (id: string, delta: number) => {
-    setCarrito((prev) =>
-      prev
-        .map((p) => (p.id === id ? { ...p, cantidad: p.cantidad + delta } : p))
-        .filter((p) => p.cantidad > 0)
-    );
+  const actualizarCantidad = (id: string, cantidad: number) => {
+    if (cantidad <= 0) setCarrito(carrito.filter(i => i.id !== id));
+    else setCarrito(carrito.map(i => i.id === id ? { ...i, cantidad, subtotal: cantidad * i.precio } : i));
   };
 
-  // Calcular total
-  const total = carrito.reduce((sum, item) => sum + item.precio * item.cantidad, 0);
+  const total = carrito.reduce((sum, item) => sum + item.subtotal, 0);
+  const montoRecibidoNum = parseFloat(montoRecibido) || 0;
+  // CORRECCIÓN: El cambio es lo que me dieron menos el total
+  const cambio = metodoPago === "Efectivo" && montoRecibidoNum >= total ? montoRecibidoNum - total : 0;
 
-  // Finalizar venta
-  const cobrar = () => {
-    if (carrito.length === 0) return;
-    setMostrarExito(true);
-    setTimeout(() => {
-      setCarrito([]);
-      setMetodoPago("Efectivo");
-      setMostrarExito(false);
-    }, 2000);
+  const handleRegistrar = async () => {
+    if (carrito.length === 0) { setModalError("El carrito está vacío"); return; }
+    if (metodoPago === "Efectivo" && montoRecibidoNum < total) { setModalError("El monto recibido es menor al total"); return; }
+
+    setLoading(true);
+    try {
+      const res = await fetch("http://localhost:8000/api/ventas/crear.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          detalles: carrito, total, metodo_pago: metodoPago,
+          monto_efectivo: metodoPago === "Efectivo" ? total : 0, // Guardamos el valor real de la venta
+          monto_transferencia: metodoPago === "Transferencia" ? total : 0,
+          usuario_id: 1
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setModalExito(`Venta registrada: ${data.codigo}`);
+        setCarrito([]); setMontoRecibido(""); cargarProductos();
+      } else {
+        setModalError(data.error || "Error al registrar");
+      }
+    } catch (err) { setModalError("Error de conexión"); }
+    finally { setLoading(false); }
   };
 
-  if (mostrarExito) {
-    return (
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "60vh" }}>
-        <Card style={{ padding: "40px", textAlign: "center", maxWidth: "400px" }}>
-          <div style={{ fontSize: "48px", marginBottom: "16px" }}>✅</div>
-          <h2 style={{ fontFamily: "'DM Serif Display', serif", marginBottom: "8px" }}>¡Venta Registrada!</h2>
-          <p style={{ color: "var(--muted-foreground)" }}>Total cobrado: <strong>${total.toFixed(2)}</strong></p>
-        </Card>
-      </div>
-    );
-  }
+  const productosFiltrados = productos.filter(p => p.nombre.toLowerCase().includes(busqueda.toLowerCase())).slice(0, 5);
+  const serviciosFiltrados = servicios.filter(s => s.nombre.toLowerCase().includes(busqueda.toLowerCase())).slice(0, 5);
 
   return (
-    <div style={{ display: "flex", gap: "24px", height: "calc(100vh - 120px)" }}>
-      
-      {/* COLUMNA IZQUIERDA: Catálogo y Búsqueda */}
-      <div style={{ flex: 1.5, display: "flex", flexDirection: "column", gap: "16px" }}>
-        <SectionHeader title="Nueva Venta" sub="Busca y agrega servicios o productos" />
-        
-        <Card style={{ padding: "20px", flex: 1, display: "flex", flexDirection: "column" }}>
-          <Input 
-            label="Buscar producto o servicio..." 
-            value={busqueda} 
-            onChange={(v: string) => setBusqueda(v)} 
-            placeholder="Ej. Uñas, Shampoo..." 
-          />
-          
-          <div style={{ marginTop: "16px", overflowY: "auto", flex: 1 }}>
-            {busqueda === "" ? (
-              <p style={{ textAlign: "center", color: "var(--muted-foreground)", marginTop: "40px" }}>
-                Escribe para buscar en el catálogo
-              </p>
-            ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "12px" }}>
-                {resultados.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => agregarAlCarrito(item)}
-                    style={{
-                      background: "var(--background)", border: "1px solid var(--border)", borderRadius: "8px",
-                      padding: "12px", textAlign: "left", cursor: "pointer", transition: "all 0.2s"
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--primary)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
-                  >
-                    <div style={{ fontSize: "10px", color: "var(--muted-foreground)", marginBottom: "4px", textTransform: "uppercase" }}>
-                      {item.tipo} {item.stock !== undefined && `· Stock: ${item.stock}`}
-                    </div>
-                    <div style={{ fontWeight: 600, fontSize: "14px", marginBottom: "4px" }}>{item.nombre}</div>
-                    <div style={{ color: "var(--primary)", fontWeight: "bold" }}>${item.precio.toFixed(2)}</div>
-                  </button>
-                ))}
-              </div>
-            )}
+    <div>
+      {/* MODAL ÉXITO */}
+      {modalExito && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000 }}>
+          <div style={{ background: "white", padding: "30px", borderRadius: "12px", textAlign: "center", maxWidth: "400px" }}>
+            <div style={{ fontSize: "50px", marginBottom: "10px" }}>✅</div>
+            <h3 style={{ margin: "0 0 10px 0" }}>{modalExito}</h3>
+            <Button onClick={() => setModalExito(null)}>Aceptar</Button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ERROR */}
+      {modalError && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000 }}>
+          <div style={{ background: "white", padding: "30px", borderRadius: "12px", textAlign: "center", maxWidth: "400px" }}>
+            <div style={{ fontSize: "50px", marginBottom: "10px" }}>⚠️</div>
+            <h3 style={{ margin: "0 0 10px 0", color: "#ef4444" }}>Error</h3>
+            <p>{modalError}</p>
+            <Button onClick={() => setModalError(null)} style={{ background: "#ef4444" }}>Cerrar</Button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+        <Card>
+          <div style={{ padding: "20px" }}>
+            <h2 style={{ fontSize: "18px", fontWeight: 600, marginBottom: "16px" }}>Agregar Productos o Servicios</h2>
+            <input type="text" placeholder="Buscar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} style={{ width: "100%", padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px", marginBottom: "16px" }} />
+            
+            <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+              {productosFiltrados.map(p => (
+                <div key={p.id} onClick={() => agregarAlCarrito('producto', p)} style={{ display: "flex", justifyContent: "space-between", padding: "10px", border: "1px solid #e5e7eb", borderRadius: "6px", marginBottom: "8px", cursor: "pointer" }}>
+                  <div><strong>{p.nombre}</strong><br/><small style={{color:"#6b7280"}}>Stock: {p.stock}</small></div>
+                  <strong style={{color:"#10b981"}}>${Number(p.precio_venta).toFixed(2)}</strong>
+                </div>
+              ))}
+              {serviciosFiltrados.map(s => (
+                <div key={s.id} onClick={() => agregarAlCarrito('servicio', s)} style={{ display: "flex", justifyContent: "space-between", padding: "10px", border: "1px solid #e5e7eb", borderRadius: "6px", marginBottom: "8px", cursor: "pointer" }}>
+                  <strong>{s.nombre}</strong>
+                  <strong style={{color:"#10b981"}}>${Number(s.precio).toFixed(2)}</strong>
+                </div>
+              ))}
+            </div>
           </div>
         </Card>
-      </div>
 
-      {/* COLUMNA DERECHA: Ticket / Carrito */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-        <Card style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-          <div style={{ padding: "20px", borderBottom: "1px solid var(--border)" }}>
-            <h3 style={{ margin: 0, fontFamily: "'DM Serif Display', serif" }}>Ticket de Venta</h3>
-          </div>
-
-          {/* Lista de items */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
-            {carrito.length === 0 ? (
-              <p style={{ textAlign: "center", color: "var(--muted-foreground)", marginTop: "40px" }}>
-                El carrito está vacío
-              </p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                {carrito.map((item) => (
-                  <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)", paddingBottom: "8px" }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 500, fontSize: "14px" }}>{item.nombre}</div>
-                      <div style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>${item.precio.toFixed(2)} c/u</div>
+        <Card>
+          <div style={{ padding: "20px" }}>
+            <h2 style={{ fontSize: "18px", fontWeight: 600, marginBottom: "16px" }}>Carrito</h2>
+            {carrito.length === 0 ? <p style={{textAlign:"center", color:"#6b7280"}}>Carrito vacío</p> : (
+              <div style={{ maxHeight: "250px", overflowY: "auto", marginBottom: "16px" }}>
+                {carrito.map(item => (
+                  <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px", borderBottom: "1px solid #eee" }}>
+                    <div style={{flex:1}}><strong>{item.nombre}</strong><br/><small>{item.cantidad} x ${item.precio.toFixed(2)}</small></div>
+                    <div style={{display:"flex", gap:"5px", alignItems:"center"}}>
+                      <button onClick={() => actualizarCantidad(item.id, item.cantidad - 1)}>-</button>
+                      <span>{item.cantidad}</span>
+                      <button onClick={() => actualizarCantidad(item.id, item.cantidad + 1)}>+</button>
+                      <button onClick={() => setCarrito(carrito.filter(i => i.id !== item.id))} style={{color:"red", border:"none", background:"none", cursor:"pointer"}}>🗑️</button>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <button onClick={() => cambiarCantidad(item.id, -1)} style={{ width: "24px", height: "24px", borderRadius: "4px", border: "1px solid var(--border)", background: "var(--card)", cursor: "pointer" }}>-</button>
-                      <span style={{ fontWeight: 600, minWidth: "20px", textAlign: "center" }}>{item.cantidad}</span>
-                      <button onClick={() => cambiarCantidad(item.id, 1)} style={{ width: "24px", height: "24px", borderRadius: "4px", border: "1px solid var(--border)", background: "var(--card)", cursor: "pointer" }}>+</button>
-                    </div>
-                    <div style={{ fontWeight: "bold", minWidth: "60px", textAlign: "right" }}>
-                      ${(item.precio * item.cantidad).toFixed(2)}
-                    </div>
+                    <strong>${item.subtotal.toFixed(2)}</strong>
                   </div>
                 ))}
               </div>
             )}
-          </div>
 
-          {/* Totales y Pago */}
-          <div style={{ padding: "20px", borderTop: "1px solid var(--border)", background: "var(--background)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "16px", fontSize: "18px", fontWeight: "bold" }}>
-              <span>Total a pagar:</span>
-              <span style={{ color: "var(--primary)", fontFamily: "'DM Serif Display', serif" }}>${total.toFixed(2)}</span>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "20px", fontWeight: 700, marginBottom: "16px" }}>
+              <span>Total:</span>
+              <span style={{ color: "#10b981" }}>${total.toFixed(2)}</span>
             </div>
 
-            <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "8px" }}>Método de Pago</label>
-              <select 
-                value={metodoPago} 
-                onChange={(e) => setMetodoPago(e.target.value)}
-                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--card)", fontSize: "14px" }}
-              >
-                <option value="Efectivo">Efectivo</option>
-                <option value="Transferencia">Transferencia</option>
-                <option value="Tarjeta">Tarjeta</option>
-              </select>
-            </div>
+            <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value as any)} style={{ width: "100%", padding: "10px", marginBottom: "10px", border: "1px solid #d1d5db", borderRadius: "6px" }}>
+              <option value="Efectivo">Efectivo</option>
+              <option value="Transferencia">Transferencia</option>
+            </select>
 
-            <Button 
-              onClick={cobrar} 
-              disabled={carrito.length === 0}
-              style={{ width: "100%", padding: "14px", fontSize: "16px" }}
-            >
-              Cobrar Venta
-            </Button>
+            {metodoPago === "Efectivo" && (
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{display:"block", marginBottom:"5px", fontSize:"13px"}}>Monto Recibido:</label>
+                <input type="number" value={montoRecibido} onChange={(e) => setMontoRecibido(e.target.value)} style={{ width: "100%", padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px" }} />
+                {montoRecibidoNum >= total && total > 0 && (
+                  <div style={{ marginTop: "10px", padding: "10px", background: "#ecfdf5", borderRadius: "6px", color: "#059669", fontWeight: "bold", textAlign: "center" }}>
+                    Cambio a entregar: ${cambio.toFixed(2)}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <Button onClick={handleRegistrar} disabled={loading} style={{ width: "100%" }}>{loading ? "Procesando..." : "Registrar Venta"}</Button>
           </div>
         </Card>
       </div>

@@ -1,173 +1,224 @@
-import { useState } from "react";
-import { Card, Badge, Table, TR, TD, SearchBar, SectionHeader, Button, Modal, Input } from "../components/ui";
+import { useState, useEffect } from "react";
+import { Card, Badge, Button } from "../components/ui";
 
-type CuentaPorPagar = {
-  id: string;
-  compraId: string;
+type Cuenta = {
+  id: number;
+  compra_id: number;
+  proveedor_id: number;
   proveedor: string;
-  montoOriginal: number;
-  montoPagado: number;
-  fechaVencimiento: string;
-  estado: "Pendiente" | "Pagada" | "Vencida";
+  codigo_compra: string;
+  monto_original: number;
+  monto_pagado: number;
+  fecha_vencimiento: string;
+  estado: string;
 };
 
-const initialCuentas: CuentaPorPagar[] = [
-  { id: "CP-001", compraId: "C-0022", proveedor: "Distribuidora Glamour", montoOriginal: 1240.00, montoPagado: 0, fechaVencimiento: "10/10/2026", estado: "Pendiente" },
-  { id: "CP-002", compraId: "C-0019", proveedor: "BellyNails S.A.", montoOriginal: 450.00, montoPagado: 450.00, fechaVencimiento: "01/09/2026", estado: "Pagada" },
-  { id: "CP-003", compraId: "C-0015", proveedor: "ProLash Supply", montoOriginal: 320.00, montoPagado: 0, fechaVencimiento: "01/09/2026", estado: "Vencida" },
-  { id: "CP-004", compraId: "C-0024", proveedor: "Importadora de Uñas", montoOriginal: 780.00, montoPagado: 300.00, fechaVencimiento: "20/10/2026", estado: "Pendiente" },
-];
-
 export default function CuentasPorPagar() {
-  const [cuentas, setCuentas] = useState<CuentaPorPagar[]>(initialCuentas);
-  const [search, setSearch] = useState("");
-  const [filtroEstado, setFiltroEstado] = useState("Todos");
-  const [cuentaSeleccionada, setCuentaSeleccionada] = useState<CuentaPorPagar | null>(null);
-  const [montoPago, setMontoPago] = useState("");
+  const [cuentas, setCuentas] = useState<Cuenta[]>([]);
+  const [filtroEstado, setFiltroEstado] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [modalPago, setModalPago] = useState<Cuenta | null>(null);
+  const [montoPagado, setMontoPagado] = useState("");
+  const [metodoPago, setMetodoPago] = useState("Efectivo");
+  const [modalExito, setModalExito] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
 
-  const filtered = cuentas.filter((c) => {
-    const matchSearch = c.proveedor.toLowerCase().includes(search.toLowerCase()) || c.compraId.toLowerCase().includes(search.toLowerCase());
-    const matchEstado = filtroEstado === "Todos" || c.estado === filtroEstado;
-    return matchSearch && matchEstado;
-  });
+  useEffect(() => { cargarCuentas(); }, [filtroEstado]);
 
-  // Cálculos para tarjetas
-  const totalPendiente = filtered.filter(c => c.estado !== "Pagada").reduce((sum, c) => sum + (c.montoOriginal - c.montoPagado), 0);
-  const totalVencido = filtered.filter(c => c.estado === "Vencida").reduce((sum, c) => sum + (c.montoOriginal - c.montoPagado), 0);
-  const totalPagado = filtered.filter(c => c.estado === "Pagada").reduce((sum, c) => sum + c.montoPagado, 0);
-
-  const handleRegistrarPago = () => {
-    if (!cuentaSeleccionada || !montoPago) return;
-    const monto = Number(montoPago);
-    setCuentas((prev) =>
-      prev.map((c) => {
-        if (c.id === cuentaSeleccionada.id) {
-          const nuevoPagado = c.montoPagado + monto;
-          const nuevoEstado = nuevoPagado >= c.montoOriginal ? "Pagada" : "Pendiente";
-          return { ...c, montoPagado: nuevoPagado, estado: nuevoEstado };
-        }
-        return c;
-      })
-    );
-    setCuentaSeleccionada(null);
-    setMontoPago("");
+  const cargarCuentas = async () => {
+    try {
+      setLoading(true);
+      const params = filtroEstado ? `?estado=${filtroEstado}` : "";
+      const res = await fetch(`http://localhost:8000/api/cuentas_por_pagar/listar.php${params}`);
+      const data = await res.json();
+      if (data.success) setCuentas(data.cuentas);
+    } catch (err) {
+      setModalError("Error al cargar cuentas");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const getEstadoBadge = (estado: string) => {
-    if (estado === "Pagada") return <Badge variant="success">Pagada</Badge>;
-    if (estado === "Vencida") return <Badge variant="danger">Vencida</Badge>;
-    return <Badge variant="warning">Pendiente</Badge>;
+  const handlePagar = async () => {
+    if (!modalPago || !montoPagado) return;
+    
+    setLoading(true);
+    try {
+      const res = await fetch("http://localhost:8000/api/cuentas_por_pagar/marcar_pagada.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: modalPago.id,
+          monto_pagado: parseFloat(montoPagado),
+          metodo_pago: metodoPago
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setModalExito(`Cuenta de ${modalPago.proveedor} marcada como pagada`);
+        setModalPago(null);
+        setMontoPagado("");
+        cargarCuentas();
+      } else {
+        setModalError(data.error);
+      }
+    } catch (err) {
+      setModalError("Error de conexión");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const totalPendiente = cuentas
+    .filter(c => c.estado === 'Pendiente' || c.estado === 'Vencida')
+    .reduce((sum, c) => sum + (Number(c.monto_original) - Number(c.monto_pagado)), 0);
+
+  const getBadgeVariant = (estado: string) => {
+    if (estado === 'Pagada') return 'success';
+    if (estado === 'Vencida') return 'danger';
+    return 'warning';
   };
 
   return (
     <div>
-      <SectionHeader
-        title="Cuentas por Pagar"
-        sub="Control de deudas con proveedores"
-      />
+      {/* Modales */}
+      {modalExito && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000 }}>
+          <div style={{ background: "white", padding: "30px", borderRadius: "12px", textAlign: "center", maxWidth: "400px" }}>
+            <div style={{ fontSize: "50px", marginBottom: "10px" }}>✅</div>
+            <h3>{modalExito}</h3>
+            <Button onClick={() => setModalExito(null)}>Aceptar</Button>
+          </div>
+        </div>
+      )}
 
-      {/* Tarjetas de Resumen */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "24px" }}>
-        <Card style={{ padding: "20px", border: "1px solid rgba(196,126,26,0.3)" }}>
-          <div style={{ fontSize: "12px", color: "var(--muted-foreground)", marginBottom: "8px" }}>Total Pendiente</div>
-          <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--warning)", fontFamily: "'DM Serif Display', serif" }}>${totalPendiente.toFixed(2)}</div>
-        </Card>
-        <Card style={{ padding: "20px", border: "1px solid rgba(184,64,64,0.3)" }}>
-          <div style={{ fontSize: "12px", color: "var(--muted-foreground)", marginBottom: "8px" }}>Total Vencido</div>
-          <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--danger)", fontFamily: "'DM Serif Display', serif" }}>${totalVencido.toFixed(2)}</div>
-        </Card>
-        <Card style={{ padding: "20px" }}>
-          <div style={{ fontSize: "12px", color: "var(--muted-foreground)", marginBottom: "8px" }}>Total Pagado</div>
-          <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--success)", fontFamily: "'DM Serif Display', serif" }}>${totalPagado.toFixed(2)}</div>
-        </Card>
+      {modalError && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000 }}>
+          <div style={{ background: "white", padding: "30px", borderRadius: "12px", textAlign: "center", maxWidth: "400px" }}>
+            <div style={{ fontSize: "50px", marginBottom: "10px" }}>️</div>
+            <h3 style={{ color: "#ef4444" }}>Error</h3>
+            <p>{modalError}</p>
+            <Button onClick={() => setModalError(null)} style={{ background: "#ef4444" }}>Cerrar</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Resumen */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px", marginBottom: "24px" }}>
+        <div style={{ background: "white", borderRadius: "12px", padding: "20px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+          <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "4px" }}>Total por pagar</div>
+          <div style={{ fontSize: "24px", fontWeight: 700, color: "#ef4444" }}>${totalPendiente.toFixed(2)}</div>
+        </div>
+        <div style={{ background: "white", borderRadius: "12px", padding: "20px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+          <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "4px" }}>Cuentas registradas</div>
+          <div style={{ fontSize: "24px", fontWeight: 700 }}>{cuentas.length}</div>
+        </div>
       </div>
 
-      {/* Tabla */}
       <Card>
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px" }}>
-          <SearchBar value={search} onChange={setSearch} placeholder="Buscar por proveedor o compra..." />
-          <select 
-            value={filtroEstado} 
-            onChange={(e) => setFiltroEstado(e.target.value)}
-            style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--background)", color: "var(--foreground)", fontSize: "13px", outline: "none" }}
-          >
-            <option value="Todos">Todos los estados</option>
-            <option value="Pendiente">Pendientes</option>
-            <option value="Vencida">Vencidas</option>
-            <option value="Pagada">Pagadas</option>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", gap: "12px", alignItems: "center" }}>
+          <label style={{ fontSize: "13px", fontWeight: 600 }}>Filtrar por estado:</label>
+          <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} style={{ padding: "8px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "13px" }}>
+            <option value="">Todos</option>
+            <option value="Pendiente">Pendiente</option>
+            <option value="Pagada">Pagada</option>
+            <option value="Vencida">Vencida</option>
           </select>
         </div>
 
-        <Table headers={["ID", "Compra", "Proveedor", "Monto Original", "Pagado", "Restante", "Vencimiento", "Estado", ""]}>
-          {filtered.map((c) => (
-            <TR key={c.id}>
-              <TD mono>{c.id}</TD>
-              <TD mono>{c.compraId}</TD>
-              <TD>{c.proveedor}</TD>
-              <TD mono>${c.montoOriginal.toFixed(2)}</TD>
-              <TD mono style={{ color: "var(--success)" }}>${c.montoPagado.toFixed(2)}</TD>
-              <TD mono style={{ fontWeight: "bold", color: (c.montoOriginal - c.montoPagado) > 0 ? "var(--danger)" : "var(--success)" }}>
-                ${(c.montoOriginal - c.montoPagado).toFixed(2)}
-              </TD>
-              <TD style={{ fontSize: "12px" }}>{c.fechaVencimiento}</TD>
-              <TD>{getEstadoBadge(c.estado)}</TD>
-              <TD>
-                {c.estado !== "Pagada" && (
-                  <button 
-                    onClick={() => setCuentaSeleccionada(c)} 
-                    style={{ background: "none", border: "none", color: "var(--primary)", fontSize: "12px", cursor: "pointer", fontWeight: 500 }}
-                  >
-                    Registrar pago →
-                  </button>
+        {loading ? (
+          <div style={{ padding: "40px", textAlign: "center" }}>Cargando...</div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "2px solid #e5e7eb" }}>
+                  <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>COMPRA</th>
+                  <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>PROVEEDOR</th>
+                  <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>MONTO</th>
+                  <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>PAGADO</th>
+                  <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>SALDO</th>
+                  <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>VENCIMIENTO</th>
+                  <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>ESTADO</th>
+                  <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>ACCIÓN</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cuentas.map(c => {
+                  const saldo = Number(c.monto_original) - Number(c.monto_pagado);
+                  return (
+                    <tr key={c.id} style={{ borderBottom: "1px solid #e5e7eb" }}>
+                      <td style={{ padding: "12px", fontFamily: "monospace", fontWeight: 600 }}>{c.codigo_compra}</td>
+                      <td style={{ padding: "12px" }}>{c.proveedor}</td>
+                      <td style={{ padding: "12px", fontWeight: 600 }}>${Number(c.monto_original).toFixed(2)}</td>
+                      <td style={{ padding: "12px", color: "#10b981" }}>${Number(c.monto_pagado).toFixed(2)}</td>
+                      <td style={{ padding: "12px", fontWeight: 700, color: saldo > 0 ? "#ef4444" : "#10b981" }}>${saldo.toFixed(2)}</td>
+                      <td style={{ padding: "12px" }}>{new Date(c.fecha_vencimiento).toLocaleDateString('es-MX')}</td>
+                      <td style={{ padding: "12px" }}>
+                        <Badge variant={getBadgeVariant(c.estado) as any}>{c.estado}</Badge>
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        {c.estado !== 'Pagada' && (
+                          <button 
+                            onClick={() => { setModalPago(c); setMontoPagado(saldo.toString()); }}
+                            style={{ background: "none", border: "none", color: "#10b981", cursor: "pointer", fontWeight: 600, fontSize: "13px" }}
+                          >
+                            Pagar
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {cuentas.length === 0 && (
+                  <tr><td colSpan={8} style={{ textAlign: "center", padding: "40px", color: "#6b7280" }}>No hay cuentas por pagar</td></tr>
                 )}
-              </TD>
-            </TR>
-          ))}
-        </Table>
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
 
-      {/* Modal Registrar Pago */}
-      {cuentaSeleccionada && (
-        <Modal title={`Registrar Pago - ${cuentaSeleccionada.id}`} onClose={() => { setCuentaSeleccionada(null); setMontoPago(""); }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            <div style={{ background: "var(--muted)", padding: "16px", borderRadius: "8px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                <span style={{ fontSize: "13px", color: "var(--muted-foreground)" }}>Proveedor:</span>
-                <span style={{ fontWeight: 500 }}>{cuentaSeleccionada.proveedor}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                <span style={{ fontSize: "13px", color: "var(--muted-foreground)" }}>Monto original:</span>
-                <span style={{ fontWeight: 500 }}>${cuentaSeleccionada.montoOriginal.toFixed(2)}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                <span style={{ fontSize: "13px", color: "var(--muted-foreground)" }}>Ya pagado:</span>
-                <span style={{ fontWeight: 500, color: "var(--success)" }}>${cuentaSeleccionada.montoPagado.toFixed(2)}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px solid var(--border)" }}>
-                <span style={{ fontSize: "13px", fontWeight: 600 }}>Restante por pagar:</span>
-                <span style={{ fontWeight: "bold", color: "var(--danger)" }}>
-                  ${(cuentaSeleccionada.montoOriginal - cuentaSeleccionada.montoPagado).toFixed(2)}
-                </span>
-              </div>
-            </div>
+      {/* MODAL PAGAR */}
+      {modalPago && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 }} onClick={() => setModalPago(null)}>
+          <div style={{ background: "white", padding: "32px", borderRadius: "12px", width: "100%", maxWidth: "450px" }} onClick={e => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0, marginBottom: "8px" }}>Registrar Pago</h2>
+            <p style={{ color: "#6b7280", marginBottom: "20px", fontSize: "14px" }}>
+              Proveedor: <strong>{modalPago.proveedor}</strong><br/>
+              Saldo pendiente: <strong style={{ color: "#ef4444" }}>${(Number(modalPago.monto_original) - Number(modalPago.monto_pagado)).toFixed(2)}</strong>
+            </p>
 
-            <Input 
-              label="Monto a pagar ($)" 
-              value={montoPago} 
-              onChange={(v: string) => setMontoPago(v)} 
-              type="number" 
-              placeholder="0.00"
-              required 
-            />
-            <div style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
-              💡 Si pagas el monto completo, la cuenta se marcará automáticamente como "Pagada".
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div>
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: 600 }}>Monto a pagar *</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  value={montoPagado} 
+                  onChange={(e) => setMontoPagado(e.target.value)}
+                  style={{ width: "100%", padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "14px" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: 600 }}>Método de pago *</label>
+                <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} style={{ width: "100%", padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "14px" }}>
+                  <option value="Efectivo">Efectivo</option>
+                  <option value="Transferencia">Transferencia</option>
+                  <option value="Tarjeta">Tarjeta</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
+                <button onClick={() => setModalPago(null)} style={{ flex: 1, padding: "12px", border: "1px solid #d1d5db", borderRadius: "6px", background: "white", cursor: "pointer" }}>Cancelar</button>
+                <button onClick={handlePagar} disabled={loading} style={{ flex: 1, padding: "12px", border: "none", borderRadius: "6px", background: "#10b981", color: "white", cursor: "pointer" }}>
+                  {loading ? "Procesando..." : "Confirmar Pago"}
+                </button>
+              </div>
             </div>
           </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--border)" }}>
-            <Button variant="secondary" onClick={() => { setCuentaSeleccionada(null); setMontoPago(""); }}>Cancelar</Button>
-            <Button onClick={handleRegistrarPago}>Confirmar Pago</Button>
-          </div>
-        </Modal>
+        </div>
       )}
     </div>
   );

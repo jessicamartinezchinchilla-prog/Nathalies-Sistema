@@ -1,156 +1,319 @@
-import { useState } from "react";
-import { Card, Badge, Table, TR, TD, SearchBar, SectionHeader, Button, Modal } from "../components/ui";
-
-type DetalleItem = {
-  nombre: string;
-  cantidad: number;
-  precio: number;
-};
+import { useState, useEffect } from "react";
+import { Card, Badge, Button } from "../components/ui";
 
 type Venta = {
-  id: string;
+  id: number;
+  codigo: string;
   fecha: string;
-  itemsResumen: string;
   total: number;
-  metodo: "Efectivo" | "Transferencia" | "Tarjeta";
-  estado: "Completada" | "Anulada";
-  detalle: DetalleItem[];
+  metodo_pago: string;
+  estado: string;
+  usuario: string;
 };
 
-// Datos de prueba
-const initialVentas: Venta[] = [
-  { 
-    id: "V-0090", fecha: "15/09/2026 10:32", itemsResumen: "Uñas acrílicas, Esmalte", total: 32.00, metodo: "Efectivo", estado: "Completada",
-    detalle: [{ nombre: "Uñas acrílicas completas", cantidad: 1, precio: 25.00 }, { nombre: "Esmalte semipermanente", cantidad: 1, precio: 7.00 }]
-  },
-  { 
-    id: "V-0089", fecha: "15/09/2026 09:15", itemsResumen: "Pedicure spa", total: 20.00, metodo: "Transferencia", estado: "Completada",
-    detalle: [{ nombre: "Pedicure spa", cantidad: 1, precio: 20.00 }]
-  },
-  { 
-    id: "V-0088", fecha: "14/09/2026 16:45", itemsResumen: "Shampoo reparador", total: 12.00, metodo: "Efectivo", estado: "Completada",
-    detalle: [{ nombre: "Shampoo reparador 500ml", cantidad: 1, precio: 12.00 }]
-  },
-  { 
-    id: "V-0087", fecha: "14/09/2026 11:20", itemsResumen: "Lifting de pestañas", total: 35.00, metodo: "Tarjeta", estado: "Completada",
-    detalle: [{ nombre: "Lifting de pestañas", cantidad: 1, precio: 35.00 }]
-  },
-  { 
-    id: "V-0086", fecha: "13/09/2026 15:10", itemsResumen: "Manicure clásico", total: 15.00, metodo: "Efectivo", estado: "Anulada",
-    detalle: [{ nombre: "Manicure clásico", cantidad: 1, precio: 15.00 }]
-  },
-];
+type DetalleVenta = {
+  id: number;
+  tipo: string;
+  item_id: number;
+  nombre_item: string;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal: number;
+};
+
+type Filtros = {
+  fecha_desde: string;
+  fecha_hasta: string;
+  metodo_pago: string;
+  estado: string;
+};
 
 export default function HistorialVentas() {
-  const [ventas] = useState<Venta[]>(initialVentas);
-  const [search, setSearch] = useState("");
-  const [filtroMetodo, setFiltroMetodo] = useState("Todos");
-  const [ventaSeleccionada, setVentaSeleccionada] = useState<Venta | null>(null);
+  const [ventas, setVentas] = useState<Venta[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showDetalle, setShowDetalle] = useState<number | null>(null);
+  const [detalleData, setDetalleData] = useState<{ venta: any; detalles: DetalleVenta[] } | null>(null);
+  const [showConfirmAnular, setShowConfirmAnular] = useState<number | null>(null);
+  const [totalMonto, setTotalMonto] = useState(0);
 
-  // Filtrar ventas
-  const filtered = ventas.filter((v) => {
-    const matchSearch = v.id.toLowerCase().includes(search.toLowerCase()) || v.itemsResumen.toLowerCase().includes(search.toLowerCase());
-    const matchMetodo = filtroMetodo === "Todos" || v.metodo === filtroMetodo;
-    return matchSearch && matchMetodo;
+  const [filtros, setFiltros] = useState<Filtros>({
+    fecha_desde: "",
+    fecha_hasta: "",
+    metodo_pago: "",
+    estado: ""
   });
 
-  // Calcular totales para las tarjetas
-  const totalDia = filtered.reduce((sum, v) => sum + v.total, 0);
-  const totalEfectivo = filtered.filter(v => v.metodo === "Efectivo").reduce((sum, v) => sum + v.total, 0);
-  const totalTransferencia = filtered.filter(v => v.metodo === "Transferencia").reduce((sum, v) => sum + v.total, 0);
+  useEffect(() => {
+    cargarVentas();
+  }, [filtros]);
 
-  const getMetodoBadge = (metodo: string) => {
-    if (metodo === "Efectivo") return <Badge variant="success">Efectivo</Badge>;
-    if (metodo === "Transferencia") return <Badge variant="warning">Transferencia</Badge>;
-    return <Badge variant="default">Tarjeta</Badge>;
+  const cargarVentas = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const params = new URLSearchParams();
+      if (filtros.fecha_desde) params.append('fecha_desde', filtros.fecha_desde);
+      if (filtros.fecha_hasta) params.append('fecha_hasta', filtros.fecha_hasta);
+      if (filtros.metodo_pago) params.append('metodo_pago', filtros.metodo_pago);
+      if (filtros.estado) params.append('estado', filtros.estado);
+
+      const response = await fetch(`http://localhost:8000/api/ventas/listar.php?${params.toString()}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setVentas(data.ventas);
+        setTotalMonto(data.total_monto);
+      } else {
+        setError(data.error || "Error al cargar ventas");
+      }
+    } catch (err) {
+      setError("No se pudo conectar con el servidor");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verDetalle = async (ventaId: number) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/ventas/detalle.php?id=${ventaId}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setDetalleData(data);
+        setShowDetalle(ventaId);
+      } else {
+        setError(data.error || "Error al cargar detalle");
+      }
+    } catch (err) {
+      setError("No se pudo conectar con el servidor");
+    }
+  };
+
+  const anularVenta = async (ventaId: number) => {
+    try {
+      const response = await fetch("http://localhost:8000/api/ventas/anular.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: ventaId })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setShowConfirmAnular(null);
+        setShowDetalle(null);
+        await cargarVentas();
+      } else {
+        setError(data.error || "Error al anular venta");
+      }
+    } catch (err) {
+      setError("No se pudo conectar con el servidor");
+    }
+  };
+
+  const handleFiltroChange = (name: keyof Filtros, value: string) => {
+    setFiltros({ ...filtros, [name]: value });
+  };
+
+  const filterInputStyle: React.CSSProperties = {
+    height: "40px",
+    padding: "0 12px",
+    border: "1px solid #d1d5db",
+    borderRadius: "8px",
+    fontSize: "13px",
+    background: "white",
+    outline: "none",
+    boxSizing: "border-box"
   };
 
   return (
     <div>
-      <SectionHeader
-        title="Historial de Ventas"
-        sub={`${filtered.length} ventas registradas`}
-        actions={<Button variant="secondary">⬇ Exportar</Button>}
-      />
+    
 
-      {/* Tarjetas de Resumen */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "24px" }}>
-        <Card style={{ padding: "20px" }}>
-          <div style={{ fontSize: "12px", color: "var(--muted-foreground)", marginBottom: "8px" }}>Total filtrado</div>
-          <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--primary)", fontFamily: "'DM Serif Display', serif" }}>${totalDia.toFixed(2)}</div>
-        </Card>
-        <Card style={{ padding: "20px" }}>
-          <div style={{ fontSize: "12px", color: "var(--muted-foreground)", marginBottom: "8px" }}>En Efectivo</div>
-          <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--success)", fontFamily: "'DM Serif Display', serif" }}>${totalEfectivo.toFixed(2)}</div>
-        </Card>
-        <Card style={{ padding: "20px" }}>
-          <div style={{ fontSize: "12px", color: "var(--muted-foreground)", marginBottom: "8px" }}>En Transferencia</div>
-          <div style={{ fontSize: "24px", fontWeight: "bold", color: "#4E63C8", fontFamily: "'DM Serif Display', serif" }}>${totalTransferencia.toFixed(2)}</div>
-        </Card>
-      </div>
+      {error && (
+        <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "8px", padding: "12px", marginBottom: "20px", fontSize: "13px", color: "#EF4444" }}>
+          ⚠️ {error}
+          <button onClick={cargarVentas} style={{ marginLeft: "10px", background: "none", border: "none", color: "#EF4444", textDecoration: "underline", cursor: "pointer" }}>
+            Reintentar
+          </button>
+        </div>
+      )}
 
-      {/* Tabla de Ventas */}
-      <Card>
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px" }}>
-          <SearchBar value={search} onChange={setSearch} placeholder="Buscar por ID o productos..." />
-          <select 
-            value={filtroMetodo} 
-            onChange={(e) => setFiltroMetodo(e.target.value)}
-            style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--background)", color: "var(--foreground)", fontSize: "13px", outline: "none" }}
-          >
-            <option value="Todos">Todos los métodos</option>
-            <option value="Efectivo">Efectivo</option>
-            <option value="Transferencia">Transferencia</option>
-            <option value="Tarjeta">Tarjeta</option>
-          </select>
+      {/* Tarjetas de resumen */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px", marginBottom: "24px" }}>
+        <div style={{ background: "white", borderRadius: "12px", padding: "20px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+          <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "4px" }}>Total de ventas</div>
+          <div style={{ fontSize: "24px", fontWeight: 700 }}>{ventas.length}</div>
         </div>
 
-        <Table headers={["ID", "Fecha", "Productos / Servicios", "Total", "Método", "Estado", ""]}>
-          {filtered.map((v) => (
-            <TR key={v.id} onClick={() => setVentaSeleccionada(v)}>
-              <TD mono style={{ color: "var(--primary)", fontWeight: 600 }}>{v.id}</TD>
-              <TD style={{ fontSize: "12px" }}>{v.fecha}</TD>
-              <TD>{v.itemsResumen}</TD>
-              <TD mono style={{ fontWeight: "bold" }}>${v.total.toFixed(2)}</TD>
-              <TD>{getMetodoBadge(v.metodo)}</TD>
-              <TD>
-                <Badge variant={v.estado === "Completada" ? "success" : "danger"}>{v.estado}</Badge>
-              </TD>
-              <TD>
-                <button style={{ background: "none", border: "none", color: "var(--primary)", fontSize: "12px", cursor: "pointer" }}>
-                  Ver detalle →
-                </button>
-              </TD>
-            </TR>
-          ))}
-        </Table>
+        <div style={{ background: "white", borderRadius: "12px", padding: "20px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+          <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "4px" }}>Monto total</div>
+          <div style={{ fontSize: "24px", fontWeight: 700, color: "#10b981" }}>${Number(totalMonto).toFixed(2)}</div>
+        </div>
+      </div>
+
+      <Card>
+        {/* Filtros */}
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "12px", alignItems: "center" }}>
+            <input
+              type="date"
+              value={filtros.fecha_desde}
+              onChange={(e) => handleFiltroChange('fecha_desde', e.target.value)}
+              style={{ ...filterInputStyle, width: "100%" }}
+              placeholder="Fecha desde"
+            />
+
+            <input
+              type="date"
+              value={filtros.fecha_hasta}
+              onChange={(e) => handleFiltroChange('fecha_hasta', e.target.value)}
+              style={{ ...filterInputStyle, width: "100%" }}
+              placeholder="Fecha hasta"
+            />
+
+            <select
+              value={filtros.metodo_pago}
+              onChange={(e) => handleFiltroChange('metodo_pago', e.target.value)}
+              style={{ ...filterInputStyle, width: "100%", cursor: "pointer" }}
+            >
+              <option value="">Todos los métodos</option>
+              <option value="Efectivo">Efectivo</option>
+              <option value="Transferencia">Transferencia</option>
+            </select>
+
+            <select
+              value={filtros.estado}
+              onChange={(e) => handleFiltroChange('estado', e.target.value)}
+              style={{ ...filterInputStyle, width: "100%", cursor: "pointer" }}
+            >
+              <option value="">Todos los estados</option>
+              <option value="Completada">Completada</option>
+              <option value="Anulada">Anulada</option>
+            </select>
+          </div>
+        </div>
+
+        {loading ? (
+          <div style={{ padding: "40px", textAlign: "center", color: "var(--muted-foreground)" }}>Cargando...</div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "2px solid #e5e7eb" }}>
+                  <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>CÓDIGO</th>
+                  <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>FECHA</th>
+                  <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>TOTAL</th>
+                  <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>MÉTODO</th>
+                  <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>ESTADO</th>
+                  <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>ACCIONES</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ventas.map((v) => (
+                  <tr key={v.id} style={{ borderBottom: "1px solid #e5e7eb" }}>
+                    <td style={{ padding: "12px", fontFamily: "monospace", fontWeight: 600 }}>{v.codigo}</td>
+                    <td style={{ padding: "12px" }}>{new Date(v.fecha).toLocaleString('es-MX')}</td>
+                    <td style={{ padding: "12px", fontWeight: 700, color: "#10b981" }}>${Number(v.total).toFixed(2)}</td>
+                    <td style={{ padding: "12px" }}>{v.metodo_pago}</td>
+                    <td style={{ padding: "12px" }}>
+                      <Badge variant={v.estado === "Completada" ? "success" : "muted"}>{v.estado}</Badge>
+                    </td>
+                    <td style={{ padding: "12px" }}>
+                      <button 
+                        onClick={() => verDetalle(v.id)}
+                        style={{ background: "none", border: "none", color: "var(--primary)", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}
+                      >
+                        Ver detalle
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {ventas.length === 0 && (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: "center", padding: "40px", color: "#6b7280" }}>
+                      No se encontraron ventas
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
 
-      {/* Modal de Detalle */}
-      {ventaSeleccionada && (
-        <Modal title={`Detalle de Venta ${ventaSeleccionada.id}`} onClose={() => setVentaSeleccionada(null)}>
-          <div style={{ marginBottom: "16px", display: "flex", justifyContent: "space-between", fontSize: "14px", color: "var(--muted-foreground)" }}>
-            <span>Fecha: {ventaSeleccionada.fecha}</span>
-            <span>Estado: {ventaSeleccionada.estado}</span>
-          </div>
-          
-          <div style={{ borderTop: "1px solid var(--border)", paddingTop: "16px" }}>
-            {ventaSeleccionada.detalle.map((item, index) => (
-              <div key={index} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px dashed var(--border)" }}>
-                <div>
-                  <div style={{ fontWeight: 500 }}>{item.nombre}</div>
-                  <div style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Cantidad: {item.cantidad} x ${item.precio.toFixed(2)}</div>
-                </div>
-                <div style={{ fontWeight: "bold" }}>${(item.cantidad * item.precio).toFixed(2)}</div>
-              </div>
-            ))}
-          </div>
+      {/* MODAL DETALLE DE VENTA */}
+      {showDetalle !== null && detalleData && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 }} onClick={() => setShowDetalle(null)}>
+          <div style={{ background: "white", borderRadius: "12px", padding: "32px", width: "100%", maxWidth: "600px", maxHeight: "90vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+              <h2 style={{ margin: 0, fontSize: "20px" }}>Detalle de Venta {detalleData.venta.codigo}</h2>
+              <button onClick={() => setShowDetalle(null)} style={{ background: "none", border: "none", fontSize: "24px", cursor: "pointer" }}>×</button>
+            </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "24px", fontSize: "18px", fontWeight: "bold", color: "var(--primary)", fontFamily: "'DM Serif Display', serif" }}>
-            <span>Total Pagado:</span>
-            <span>${ventaSeleccionada.total.toFixed(2)}</span>
+            <div style={{ marginBottom: "20px", padding: "16px", background: "#f9fafb", borderRadius: "8px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "14px" }}>
+                <div><strong>Fecha:</strong> {new Date(detalleData.venta.fecha).toLocaleString('es-MX')}</div>
+                <div><strong>Método:</strong> {detalleData.venta.metodo_pago}</div>
+                <div><strong>Usuario:</strong> {detalleData.venta.usuario || 'N/A'}</div>
+                <div><strong>Estado:</strong> <Badge variant={detalleData.venta.estado === "Completada" ? "success" : "muted"}>{detalleData.venta.estado}</Badge></div>
+              </div>
+            </div>
+
+            <h3 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "12px" }}>Productos/Servicios</h3>
+            
+            <div style={{ maxHeight: "300px", overflowY: "auto", marginBottom: "16px" }}>
+              {detalleData.detalles.map((d) => (
+                <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px", border: "1px solid #e5e7eb", borderRadius: "6px", marginBottom: "8px" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600 }}>{d.nombre_item}</div>
+                    <div style={{ fontSize: "12px", color: "#6b7280" }}>
+                      {d.tipo === 'producto' ? 'Producto' : 'Servicio'} | Cantidad: {d.cantidad}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: "12px", color: "#6b7280" }}>${Number(d.precio_unitario).toFixed(2)} c/u</div>
+                    <div style={{ fontWeight: 700 }}>${Number(d.subtotal).toFixed(2)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ borderTop: "2px solid #e5e7eb", paddingTop: "16px", display: "flex", justifyContent: "space-between", fontSize: "20px", fontWeight: 700, marginBottom: "24px" }}>
+              <span>Total:</span>
+              <span style={{ color: "#10b981" }}>${Number(detalleData.venta.total).toFixed(2)}</span>
+            </div>
+
+            {detalleData.venta.estado === "Completada" && (
+              <Button 
+                onClick={() => setShowConfirmAnular(detalleData.venta.id)}
+                style={{ width: "100%", background: "#ef4444" }}
+              >
+                Anular Venta
+              </Button>
+            )}
           </div>
-        </Modal>
+        </div>
+      )}
+
+      {/* MODAL CONFIRMAR ANULACIÓN */}
+      {showConfirmAnular !== null && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1001 }} onClick={() => setShowConfirmAnular(null)}>
+          <div style={{ background: "white", borderRadius: "12px", padding: "32px", width: "100%", maxWidth: "400px" }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0, marginBottom: "16px", fontSize: "20px" }}>¿Anular venta?</h2>
+            <p style={{ color: "var(--muted-foreground)", marginBottom: "24px" }}>
+              Esta acción restaurará el stock de los productos vendidos.
+            </p>
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button onClick={() => setShowConfirmAnular(null)} style={{ flex: 1, padding: "12px", border: "1px solid #d1d5db", borderRadius: "6px", background: "white", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
+                Cancelar
+              </button>
+              <button onClick={() => anularVenta(showConfirmAnular)} style={{ flex: 1, padding: "12px", border: "none", borderRadius: "6px", background: "#ef4444", color: "white", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
+                Sí, anular
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

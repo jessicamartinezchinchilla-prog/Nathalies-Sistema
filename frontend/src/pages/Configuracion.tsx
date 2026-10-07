@@ -1,110 +1,165 @@
-import { useState } from "react";
-import { Card, SectionHeader, Button, Input, Select } from "../components/ui";
+import { useState, useEffect } from "react";
+import { Card, Button } from "../components/ui";
 
 export default function Configuracion() {
-  const [guardado, setGuardado] = useState(false);
-  const [form, setForm] = useState({
-    nombreNegocio: "Nathalie's Nails & Lashes",
-    nit: "1234567-8",
-    direccion: "Zona 1, Ciudad de Guatemala",
-    telefono: "5555-0000",
-    moneda: "USD",
-    zonaHoraria: "America/Guatemala",
-    passwordActual: "",
-    passwordNueva: "",
-    passwordConfirmar: "",
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [modalExito, setModalExito] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  const [config, setConfig] = useState({
+    nombre_negocio: "",
+    telefono: "",
+    direccion: "",
+    correo: "",
+    mensaje_ticket: ""
   });
 
-  const handleChange = (field: string, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+  useEffect(() => {
+    cargarConfiguracion();
+  }, []);
+
+  const cargarConfiguracion = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch("http://localhost:8000/api/configuracion/obtener.php");
+      const data = await res.json();
+      if (data.success) {
+        setConfig({
+          nombre_negocio: data.config.nombre_negocio || "",
+          telefono: data.config.telefono || "",
+          direccion: data.config.direccion || "",
+          correo: data.config.correo || "",
+          mensaje_ticket: data.config.mensaje_ticket || ""
+        });
+      }
+    } catch (err) {
+      setModalError("No se pudo cargar la configuración");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSave = () => {
-    setGuardado(true);
-    setTimeout(() => setGuardado(false), 3000);
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const res = await fetch("http://localhost:8000/api/configuracion/guardar.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setModalExito("✅ Configuración guardada correctamente");
+      } else {
+        setModalError(data.error || "Error al guardar");
+      }
+    } catch (err) {
+      setModalError("Error de conexión con el servidor");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setConfig({ ...config, [e.target.name]: e.target.value });
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "12px",
+    border: "1px solid #d1d5db",
+    borderRadius: "8px",
+    fontSize: "14px",
+    boxSizing: "border-box",
+    outline: "none"
   };
 
   return (
     <div>
-      <SectionHeader
-        title="Configuración General"
-        sub="Ajustes globales del sistema y datos del negocio"
-        actions={
-          <Button onClick={handleSave} variant="primary">
-             Guardar cambios
-          </Button>
-        }
-      />
-
-      {guardado && (
-        <div style={{ 
-          background: "rgba(61,139,101,0.1)", color: "var(--success)", padding: "12px 16px", 
-          borderRadius: "8px", fontSize: "13px", marginBottom: "24px", border: "1px solid rgba(61,139,101,0.2)",
-          display: "flex", alignItems: "center", gap: "8px"
-        }}>
-          ✅ Los cambios se han guardado correctamente.
+      {/* Modales */}
+      {modalExito && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000 }}>
+          <div style={{ background: "white", padding: "30px", borderRadius: "12px", textAlign: "center", maxWidth: "400px" }}>
+            <div style={{ fontSize: "50px", marginBottom: "10px" }}>✅</div>
+            <h3>{modalExito}</h3>
+            <Button onClick={() => setModalExito(null)}>Aceptar</Button>
+          </div>
+        </div>
+      )}
+      {modalError && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000 }}>
+          <div style={{ background: "white", padding: "30px", borderRadius: "12px", textAlign: "center", maxWidth: "400px" }}>
+            <div style={{ fontSize: "50px", marginBottom: "10px" }}>⚠️</div>
+            <h3 style={{ color: "#ef4444" }}>Error</h3>
+            <p>{modalError}</p>
+            <Button onClick={() => setModalError(null)} style={{ background: "#ef4444" }}>Cerrar</Button>
+          </div>
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
-        
-        {/* Columna 1: Datos del Negocio */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-          <Card style={{ padding: "24px" }}>
-            <h3 style={{ margin: "0 0 20px", fontFamily: "'DM Serif Display', serif", fontSize: "18px" }}>Datos del Negocio</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              <Input label="Nombre del salón" value={form.nombreNegocio} onChange={(v: string) => handleChange("nombreNegocio", v)} />
-              <Input label="NIT / Identificación Fiscal" value={form.nit} onChange={(v: string) => handleChange("nit", v)} />
-              <Input label="Dirección" value={form.direccion} onChange={(v: string) => handleChange("direccion", v)} />
-              <Input label="Teléfono de contacto" value={form.telefono} onChange={(v: string) => handleChange("telefono", v)} />
-            </div>
-          </Card>
+      
 
-          <Card style={{ padding: "24px" }}>
-            <h3 style={{ margin: "0 0 20px", fontFamily: "'DM Serif Display', serif", fontSize: "18px" }}>Seguridad</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              <Input label="Contraseña actual" value={form.passwordActual} onChange={(v: string) => handleChange("passwordActual", v)} type="password" placeholder="••••••••" />
-              <Input label="Nueva contraseña" value={form.passwordNueva} onChange={(v: string) => handleChange("passwordNueva", v)} type="password" placeholder="••••••••" />
-              <Input label="Confirmar nueva contraseña" value={form.passwordConfirmar} onChange={(v: string) => handleChange("passwordConfirmar", v)} type="password" placeholder="••••••••" />
+      {loading ? (
+        <div style={{ textAlign: "center", padding: "40px", color: "#6b7280" }}>Cargando configuración...</div>
+      ) : (
+        <Card>
+          <form onSubmit={handleSave} style={{ padding: "32px", display: "flex", flexDirection: "column", gap: "24px", maxWidth: "800px" }}>
+            
+            <div>
+              <h3 style={{ margin: "0 0 16px 0", fontSize: "18px", color: "#374151", borderBottom: "1px solid #e5e7eb", paddingBottom: "8px" }}>
+                Datos del Negocio
+              </h3>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+                <div>
+                  <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: 600, color: "#374151" }}>Nombre del Negocio *</label>
+                  <input type="text" name="nombre_negocio" value={config.nombre_negocio} onChange={handleChange} required style={inputStyle} placeholder="Ej: Nathalie's Nails" />
+                </div>
+                <div>
+                  <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: 600, color: "#374151" }}>Teléfono</label>
+                  <input type="text" name="telefono" value={config.telefono} onChange={handleChange} style={inputStyle} placeholder="Ej: +52 55 1234 5678" />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: 600, color: "#374151" }}>Dirección</label>
+                  <input type="text" name="direccion" value={config.direccion} onChange={handleChange} style={inputStyle} placeholder="Calle, Número, Colonia, Ciudad" />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: 600, color: "#374151" }}>Correo Electrónico</label>
+                  <input type="email" name="correo" value={config.correo} onChange={handleChange} style={inputStyle} placeholder="contacto@negocio.com" />
+                </div>
+              </div>
             </div>
-          </Card>
-        </div>
 
-        {/* Columna 2: Preferencias del Sistema */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-          <Card style={{ padding: "24px" }}>
-            <h3 style={{ margin: "0 0 20px", fontFamily: "'DM Serif Display', serif", fontSize: "18px" }}>Preferencias del Sistema</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              <Select 
-                label="Moneda predeterminada" 
-                value={form.moneda} 
-                onChange={(v: string) => handleChange("moneda", v)}
-                options={[
-                  { value: "USD", label: "Dólares (USD) $" },
-                  { value: "GTQ", label: "Quetzales (GTQ) Q" },
-                ]}
-              />
-              <Select 
-                label="Zona horaria" 
-                value={form.zonaHoraria} 
-                onChange={(v: string) => handleChange("zonaHoraria", v)}
-                options={[
-                  { value: "America/Guatemala", label: "Guatemala (GMT-6)" },
-                  { value: "America/Mexico_City", label: "Ciudad de México (GMT-6)" },
-                  { value: "America/Bogota", label: "Bogotá (GMT-5)" },
-                ]}
-              />
+            <div>
+              <h3 style={{ margin: "0 0 16px 0", fontSize: "18px", color: "#374151", borderBottom: "1px solid #e5e7eb", paddingBottom: "8px" }}>
+                Personalización de Documentos
+              </h3>
+              <div>
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: 600, color: "#374151" }}>Mensaje para Tickets / Reportes</label>
+                <textarea 
+                  name="mensaje_ticket" 
+                  value={config.mensaje_ticket} 
+                  onChange={handleChange} 
+                  rows={3} 
+                  style={{ ...inputStyle, resize: "vertical" }} 
+                  placeholder="Ej: ¡Gracias por su preferencia! Vuelva pronto."
+                />
+                <p style={{ fontSize: "12px", color: "#6b7280", marginTop: "6px" }}>
+                  Este mensaje aparecerá al final de los comprobantes o reportes que genere el sistema.
+                </p>
+              </div>
             </div>
-          </Card>
 
-          <Card style={{ padding: "24px", background: "rgba(78,99,200,0.05)", border: "1px solid rgba(78,99,200,0.15)" }}>
-            <h3 style={{ margin: "0 0 12px", fontFamily: "'DM Serif Display', serif", fontSize: "18px", color: "#4E63C8" }}>ℹ️ Información</h3>
-            <p style={{ fontSize: "13px", color: "var(--muted-foreground)", margin: 0, lineHeight: 1.5 }}>
-              Los cambios en los datos del negocio se reflejarán automáticamente en los reportes PDF y en las facturas generadas por el sistema.
-            </p>
-          </Card>
-        </div>
-      </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: "16px", borderTop: "1px solid #e5e7eb" }}>
+              <Button type="submit" disabled={saving} style={{ padding: "12px 32px", fontSize: "15px" }}>
+                {saving ? "Guardando..." : "Guardar Cambios"}
+              </Button>
+            </div>
+
+          </form>
+        </Card>
+      )}
     </div>
   );
 }

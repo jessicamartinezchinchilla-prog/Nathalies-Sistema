@@ -1,156 +1,218 @@
-import { useState } from "react";
-import { Card, Badge, Table, TR, TD, SearchBar, SectionHeader, Button, Modal, Input, Select } from "../components/ui";
+import { useState, useEffect } from "react";
+import { Card, Badge, Button } from "../components/ui";
 
 type Usuario = {
-  id: string;
+  id: number;
   nombre: string;
   email: string;
-  rol: "Administrador" | "Contador" | "Cajero";
-  estado: "Activo" | "Inactivo";
+  rol: string;
+  estado: string;
 };
 
-const initialUsuarios: Usuario[] = [
-  { id: "U01", nombre: "Nathalie López", email: "admin@nathalies.com", rol: "Administrador", estado: "Activo" },
-  { id: "U02", nombre: "Karla Méndez", email: "karla@nathalies.com", rol: "Cajero", estado: "Activo" },
-  { id: "U03", nombre: "Lic. Roberto Díaz", email: "contador@nathalies.com", rol: "Contador", estado: "Activo" },
-  { id: "U04", nombre: "Ana García", email: "ana@nathalies.com", rol: "Cajero", estado: "Inactivo" },
-];
-
-function getRolBadge(rol: Usuario["rol"]) {
-  const styles: Record<Usuario["rol"], { bg: string; color: string }> = {
-    Administrador: { bg: "rgba(181,115,138,0.15)", color: "var(--primary)" },
-    Contador: { bg: "rgba(78,99,200,0.15)", color: "#4E63C8" },
-    Cajero: { bg: "rgba(61,139,101,0.15)", color: "var(--success)" },
-  };
-  const style = styles[rol];
-  return (
-    <span style={{ background: style.bg, color: style.color, padding: "2px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: 600 }}>
-      {rol}
-    </span>
-  );
-}
+type Rol = {
+  id: number;
+  nombre: string;
+};
 
 export default function Usuarios() {
-  const [usuarios, setUsuarios] = useState<Usuario[]>(initialUsuarios);
-  const [search, setSearch] = useState("");
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [roles, setRoles] = useState<Rol[]>([]);
   const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState<Usuario | null>(null);
-  const [form, setForm] = useState<Partial<Usuario>>({});
+  const [showResetPass, setShowResetPass] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [modalExito, setModalExito] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
 
-  const filtered = usuarios.filter(
-    (u) =>
-      u.nombre.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase()) ||
-      u.rol.toLowerCase().includes(search.toLowerCase())
-  );
+  const [formData, setFormData] = useState({
+    nombre: "", email: "", password: "", rol_id: "1", estado: "Activo"
+  });
+  const [newPassword, setNewPassword] = useState("");
 
-  const openNew = () => {
-    setEditing(null);
-    setForm({ estado: "Activo", rol: "Cajero" });
-    setShowModal(true);
+  useEffect(() => {
+    cargarUsuarios();
+    cargarRoles();
+  }, []);
+
+  const cargarUsuarios = async () => {
+    const res = await fetch("http://localhost:8000/api/usuarios/listar.php");
+    const data = await res.json();
+    if (data.success) setUsuarios(data.usuarios);
   };
 
-  const openEdit = (u: Usuario) => {
-    setEditing(u);
-    setForm({ ...u });
-    setShowModal(true);
+  const cargarRoles = async () => {
+    const res = await fetch("http://localhost:8000/api/roles/listar.php"); // Asumiendo que existe, si no, hardcodeamos
+    const data = await res.json();
+    if (data.success) setRoles(data.roles);
+    else setRoles([{ id: 1, nombre: "Administrador" }, { id: 2, nombre: "Contador" }, { id: 3, nombre: "Vendedor" }]);
   };
 
-  const save = () => {
-    if (editing) {
-      setUsuarios((prev) => prev.map((u) => (u.id === editing.id ? { ...u, ...form } as Usuario : u)));
-    } else {
-      const nuevo: Usuario = {
-        id: `U${String(usuarios.length + 1).padStart(2, "0")}`,
-        nombre: form.nombre || "",
-        email: form.email || "",
-        rol: (form.rol as Usuario["rol"]) || "Cajero",
-        estado: "Activo",
-      };
-      setUsuarios((prev) => [nuevo, ...prev]);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await fetch("http://localhost:8000/api/usuarios/crear.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setModalExito("Usuario creado exitosamente");
+        setShowModal(false);
+        setFormData({ nombre: "", email: "", password: "", rol_id: "1", estado: "Activo" });
+        cargarUsuarios();
+      } else {
+        setModalError(data.error);
+      }
+    } catch (err) {
+      setModalError("Error de conexión");
+    } finally {
+      setLoading(false);
     }
-    setShowModal(false);
   };
 
-  const toggleEstado = (id: string) => {
-    setUsuarios((prev) =>
-      prev.map((u) =>
-        u.id === id ? { ...u, estado: u.estado === "Activo" ? "Inactivo" : "Activo" } : u
-      )
-    );
+  const handleToggle = async (id: number) => {
+    try {
+      const res = await fetch("http://localhost:8000/api/usuarios/toggle_estado.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      });
+      const data = await res.json();
+      if (data.success) cargarUsuarios();
+    } catch (err) {
+      setModalError("Error al cambiar estado");
+    }
+  };
+
+  const handleResetPass = async () => {
+    if (!showResetPass || !newPassword) return;
+    setLoading(true);
+    try {
+      const res = await fetch("http://localhost:8000/api/usuarios/reset_password.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: showResetPass, password: newPassword })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setModalExito("Contraseña actualizada");
+        setShowResetPass(null);
+        setNewPassword("");
+      } else {
+        setModalError(data.error);
+      }
+    } catch (err) {
+      setModalError("Error de conexión");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div>
-      <SectionHeader
-        title="Usuarios"
-        sub={`${usuarios.filter(u => u.estado === "Activo").length} usuarios activos en el sistema`}
-        actions={<Button onClick={openNew}>+ Nuevo usuario</Button>}
-      />
+      {/* Modales de Éxito/Error (Reutilizados) */}
+      {modalExito && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000 }}>
+          <div style={{ background: "white", padding: "30px", borderRadius: "12px", textAlign: "center", maxWidth: "400px" }}>
+            <div style={{ fontSize: "50px", marginBottom: "10px" }}>✅</div>
+            <h3>{modalExito}</h3>
+            <Button onClick={() => setModalExito(null)}>Aceptar</Button>
+          </div>
+        </div>
+      )}
+      {modalError && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000 }}>
+          <div style={{ background: "white", padding: "30px", borderRadius: "12px", textAlign: "center", maxWidth: "400px" }}>
+            <div style={{ fontSize: "50px", marginBottom: "10px" }}>⚠️</div>
+            <h3 style={{ color: "#ef4444" }}>Error</h3>
+            <p>{modalError}</p>
+            <Button onClick={() => setModalError(null)} style={{ background: "#ef4444" }}>Cerrar</Button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px" }}>
+        <Button onClick={() => setShowModal(true)}>Nuevo Usuario</Button>
+      </div>
+
+      
 
       <Card>
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <SearchBar value={search} onChange={setSearch} placeholder="Buscar por nombre, email o rol..." />
-          <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
-            {filtered.length} resultados
-          </span>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "2px solid #e5e7eb" }}>
+                <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>NOMBRE</th>
+                <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>CORREO</th>
+                <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>ROL</th>
+                <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>ESTADO</th>
+                <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "#6b7280" }}>ACCIONES</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usuarios.map(u => (
+                <tr key={u.id} style={{ borderBottom: "1px solid #e5e7eb" }}>
+                  <td style={{ padding: "12px", fontWeight: 600 }}>{u.nombre}</td>
+                  <td style={{ padding: "12px" }}>{u.email}</td>
+                  <td style={{ padding: "12px" }}>{u.rol}</td>
+                  <td style={{ padding: "12px" }}>
+                    <Badge variant={u.estado === "Activo" ? "success" : "muted"}>{u.estado}</Badge>
+                  </td>
+                  <td style={{ padding: "12px", display: "flex", gap: "8px" }}>
+                    <button onClick={() => handleToggle(u.id)} style={{ background: "none", border: "none", color: u.estado === "Activo" ? "#f59e0b" : "#10b981", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>
+                      {u.estado === "Activo" ? "Desactivar" : "Activar"}
+                    </button>
+                    <button onClick={() => setShowResetPass(u.id)} style={{ background: "none", border: "none", color: "#3b82f6", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>
+                      Restablecer Clave
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {usuarios.length === 0 && (
+                <tr><td colSpan={5} style={{ textAlign: "center", padding: "40px", color: "#6b7280" }}>No hay usuarios registrados</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
-
-        <Table headers={["ID", "Nombre", "Email", "Rol", "Estado", ""]}>
-          {filtered.map((u) => (
-            <TR key={u.id}>
-              <TD mono>{u.id}</TD>
-              <TD><span style={{ fontWeight: 600 }}>{u.nombre}</span></TD>
-              <TD style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{u.email}</TD>
-              <TD>{getRolBadge(u.rol)}</TD>
-              <TD>
-                <Badge variant={u.estado === "Activo" ? "success" : "muted"}>{u.estado}</Badge>
-              </TD>
-              <TD>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button onClick={() => openEdit(u)} style={{ background: "none", border: "none", color: "var(--primary)", fontSize: "12px", cursor: "pointer" }}>Editar</button>
-                  <button onClick={() => toggleEstado(u.id)} style={{ background: "none", border: "none", color: "var(--muted-foreground)", fontSize: "12px", cursor: "pointer" }}>
-                    {u.estado === "Activo" ? "Desactivar" : "Activar"}
-                  </button>
-                </div>
-              </TD>
-            </TR>
-          ))}
-        </Table>
       </Card>
 
+      {/* MODAL CREAR USUARIO */}
       {showModal && (
-        <Modal title={editing ? "Editar usuario" : "Nuevo usuario"} onClose={() => setShowModal(false)}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            <Input 
-              label="Nombre completo" 
-              value={form.nombre || ""} 
-              onChange={(v: string) => setForm((f) => ({ ...f, nombre: v }))} 
-              required 
-            />
-            <Input 
-              label="Correo electrónico" 
-              value={form.email || ""} 
-              onChange={(v: string) => setForm((f) => ({ ...f, email: v }))} 
-              type="email" 
-              required 
-            />
-            <Select
-              label="Rol de acceso"
-              value={form.rol || "Cajero"}
-              onChange={(v: string) => setForm((f) => ({ ...f, rol: v as Usuario["rol"] }))}
-              options={[
-                { value: "Administrador", label: "Administrador (Acceso total)" },
-                { value: "Contador", label: "Contador (Solo finanzas y reportes)" },
-                { value: "Cajero", label: "Cajero (Ventas, caja e inventario)" },
-              ]}
-            />
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 }} onClick={() => setShowModal(false)}>
+          <div style={{ background: "white", padding: "32px", borderRadius: "12px", width: "100%", maxWidth: "450px" }} onClick={e => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0, marginBottom: "24px" }}>Nuevo Usuario</h2>
+            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <input required placeholder="Nombre completo *" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} style={{ padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px" }} />
+              <input type="email" required placeholder="Correo electrónico *" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} style={{ padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px" }} />
+              <input type="password" required placeholder="Contraseña *" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} style={{ padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px" }} />
+              
+              <select value={formData.rol_id} onChange={e => setFormData({...formData, rol_id: e.target.value})} style={{ padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px" }}>
+                {roles.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+              </select>
+
+              <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
+                <button type="button" onClick={() => setShowModal(false)} style={{ flex: 1, padding: "12px", border: "1px solid #d1d5db", borderRadius: "6px", background: "white", cursor: "pointer" }}>Cancelar</button>
+                <button type="submit" disabled={loading} style={{ flex: 1, padding: "12px", border: "none", borderRadius: "6px", background: "#c08497", color: "white", cursor: "pointer" }}>{loading ? "Guardando..." : "Guardar"}</button>
+              </div>
+            </form>
           </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--border)" }}>
-            <Button variant="secondary" onClick={() => setShowModal(false)}>Cancelar</Button>
-            <Button onClick={save}>Guardar usuario</Button>
+        </div>
+      )}
+
+      {/* MODAL RESTABLECER CONTRASEÑA */}
+      {showResetPass !== null && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 }} onClick={() => setShowResetPass(null)}>
+          <div style={{ background: "white", padding: "32px", borderRadius: "12px", width: "100%", maxWidth: "400px" }} onClick={e => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0, marginBottom: "16px" }}>Restablecer Contraseña</h2>
+            <p style={{ color: "#6b7280", marginBottom: "16px", fontSize: "14px" }}>Ingresa la nueva contraseña para este usuario.</p>
+            <input type="password" placeholder="Nueva contraseña *" value={newPassword} onChange={e => setNewPassword(e.target.value)} style={{ width: "100%", padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px", marginBottom: "16px" }} />
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button onClick={() => { setShowResetPass(null); setNewPassword(""); }} style={{ flex: 1, padding: "12px", border: "1px solid #d1d5db", borderRadius: "6px", background: "white", cursor: "pointer" }}>Cancelar</button>
+              <button onClick={handleResetPass} disabled={loading} style={{ flex: 1, padding: "12px", border: "none", borderRadius: "6px", background: "#3b82f6", color: "white", cursor: "pointer" }}>{loading ? "Procesando..." : "Actualizar"}</button>
+            </div>
           </div>
-        </Modal>
+        </div>
       )}
     </div>
   );

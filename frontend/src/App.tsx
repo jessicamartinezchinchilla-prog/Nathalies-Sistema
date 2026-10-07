@@ -6,7 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import Productos from "./pages/Productos";
 import Insumos from "./pages/Insumos";
 import Servicios from "./pages/Servicios";
-import Movimientos from "./pages/Movimientos";
+
 import NuevaVenta from "./pages/NuevaVenta";
 import HistorialVentas from "./pages/HistorialVentas";
 import Compras from "./pages/Compras";
@@ -23,9 +23,11 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentPage, setCurrentPage] = useState("dashboard");
 
+  // Si no está logueado, mostramos solo el Login
   if (!isLoggedIn) {
     return (
       <div style={{ width: "100vw", height: "100vh", overflow: "hidden" }}>
+        {/* Aquí le pasamos la función para que Login pueda activar el estado */}
         <Login onLogin={() => setIsLoggedIn(true)} />
       </div>
     );
@@ -35,10 +37,22 @@ export default function App() {
 
   const getPageTitle = () => {
     const titles: Record<string, string> = {
-      dashboard: "Dashboard", productos: "Productos", insumos: "Insumos", servicios: "Servicios", movimientos: "Movimientos",
-      "nueva-venta": "Nueva Venta", "historial-ventas": "Historial de Ventas", "cierre-caja": "Cierre de Caja",
-      compras: "Compras", proveedores: "Proveedores", "cuentas-pagar": "Cuentas por Pagar", gastos: "Gastos",
-      contabilidad: "Contabilidad", usuarios: "Usuarios", reportes: "Reportes", configuracion: "Configuración General",
+      dashboard: "Dashboard",
+      productos: "Productos",
+      insumos: "Insumos",
+      servicios: "Servicios",
+      movimientos: "Movimientos",
+      "nueva-venta": "Nueva Venta",
+      "historial-ventas": "Historial de Ventas",
+      "cierre-caja": "Cierre de Caja",
+      compras: "Compras",
+      proveedores: "Proveedores",
+      "cuentas-pagar": "Cuentas por Pagar",
+      gastos: "Gastos",
+      contabilidad: "Contabilidad",
+      usuarios: "Usuarios",
+      reportes: "Reportes",
+      configuracion: "Configuración General",
     };
     return titles[currentPage] || "Sistema";
   };
@@ -53,7 +67,7 @@ export default function App() {
           {currentPage === "productos" && <Productos />}
           {currentPage === "insumos" && <Insumos />}
           {currentPage === "servicios" && <Servicios />}
-          {currentPage === "movimientos" && <Movimientos />}
+          
           {currentPage === "nueva-venta" && <NuevaVenta />}
           {currentPage === "historial-ventas" && <HistorialVentas />}
           {currentPage === "compras" && <Compras />}

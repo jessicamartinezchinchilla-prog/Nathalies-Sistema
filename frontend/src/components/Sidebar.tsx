@@ -15,7 +15,7 @@ const nav: NavItem[] = [
   },
   {
     id: "inventario-op", label: "Inventario y Operaciones", icon: "",
-    children: [{ id: "productos", label: "Productos" }, { id: "insumos", label: "Insumos" }, { id: "servicios", label: "Servicios" }, { id: "movimientos", label: "Movimientos" }],
+    children: [{ id: "productos", label: "Productos" }, { id: "insumos", label: "Insumos" }, { id: "servicios", label: "Servicios" },],
   },
   { id: "compras", label: "Compras", icon: "" },
   { id: "proveedores", label: "Proveedores", icon: "" },
@@ -38,7 +38,7 @@ export default function Sidebar({ current, onNavigate }: Props) {
   const isActive = (item: NavItem) => item.id === current || item.children?.some((c) => c.id === current);
 
   return (
-    <aside style={{ width: "260px", background: "#1E1E2D", height: "100vh", display: "flex", flexDirection: "column", color: "#A0A0B0", flexShrink: 0 }}>
+    <aside style={{ width: "260px", background: "#190C30", height: "100vh", display: "flex", flexDirection: "column", color: "#A0A0B0", flexShrink: 0 }}>
       {/* Logo */}
       <div style={{ padding: "24px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: "12px" }}>
         <div style={{ width: "36px", height: "36px", background: "#B5738A", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: "bold", fontSize: "18px", fontFamily: "'DM Serif Display', serif" }}>N</div>

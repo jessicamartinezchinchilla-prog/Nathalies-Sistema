@@ -22,11 +22,11 @@ html, body {
   
   --background: #F8F9FC;
   --card: #FFFFFF;
-  --sidebar: #1E1E2D;
-  --sidebar-hover: #2B2B40;
+  --sidebar: #190C30;
+  --sidebar-hover: #190C30;
   --sidebar-text: #A0A0B0;
   
-  --foreground: #111827;
+  --foreground: #190C30;
   --muted-foreground: #6B7280;
   --border: #E5E7EB;
   --muted: #F3F4F6;

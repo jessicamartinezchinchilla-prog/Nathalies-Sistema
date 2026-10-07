@@ -1,177 +1,222 @@
-import { useState } from "react";
-import { Card, SectionHeader, Button, Badge } from "../components/ui";
+import { useState, useEffect } from "react";
+import { Card, Badge, Button } from "../components/ui";
+
+const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
 export default function Contabilidad() {
-  const [periodo, setPeriodo] = useState("Septiembre 2026");
+  const [mes, setMes] = useState(new Date().getMonth() + 1);
+  const [anio, setAnio] = useState(new Date().getFullYear());
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [activos, setActivos] = useState<any[]>([]);
+  const [showModal, setShowModal] = useState(false);
+  const [newActivo, setNewActivo] = useState({ nombre: "", categoria: "Equipo", valor_compra: "", fecha_compra: "" });
 
-  // Datos simulados del Estado de Resultados
-  const datos = {
-    ingresos: [
-      { concepto: "Ventas de Servicios", monto: 12610.00 },
-      { concepto: "Ventas de Productos (Retail)", monto: 5840.00 },
-    ],
-    costos: [
-      { concepto: "Costo de Servicios (Insumos)", monto: 3200.00 },
-      { concepto: "Costo de Productos Vendidos", monto: 2100.00 },
-    ],
-    gastos: [
-      { concepto: "Alquiler del local", monto: 1200.00 },
-      { concepto: "Servicios básicos (Luz, Agua, Internet)", monto: 225.00 },
-      { concepto: "Marketing y Publicidad", monto: 250.00 },
-      { concepto: "Mantenimiento y Reparaciones", monto: 150.00 },
-      { concepto: "Otros gastos operativos", monto: 455.00 },
-    ]
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      fetch(`http://localhost:8000/api/contabilidad/resumen.php?mes=${mes}&anio=${anio}`).then(r => r.json()),
+      fetch(`http://localhost:8000/api/contabilidad/activos.php`).then(r => r.json())
+    ]).then(([res1, res2]) => {
+      if (res1.success) setData(res1.data);
+      if (res2.success) setActivos(res2.activos);
+    }).catch(err => console.error(err))
+      .finally(() => setLoading(false));
+  }, [mes, anio]);
+
+  const fmt = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'USD' }).format(n);
+
+  const handleAddActivo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await fetch("http://localhost:8000/api/contabilidad/activos.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...newActivo, valor_compra: parseFloat(newActivo.valor_compra) })
+    });
+    setShowModal(false);
+    setNewActivo({ nombre: "", categoria: "Equipo", valor_compra: "", fecha_compra: "" });
+    // Recargar datos
+    const res = await fetch(`http://localhost:8000/api/contabilidad/activos.php`);
+    const json = await res.json();
+    if (json.success) setActivos(json.activos);
   };
 
-  // Cálculos automáticos
-  const totalIngresos = datos.ingresos.reduce((sum: any, item: any) => sum + item.monto, 0);
-  const totalCostos = datos.costos.reduce((sum: any, item: any) => sum + item.monto, 0);
-  const utilidadBruta = totalIngresos - totalCostos;
-  const totalGastos = datos.gastos.reduce((sum: any, item: any) => sum + item.monto, 0);
-  const utilidadNeta = utilidadBruta - totalGastos;
-  const margenNeto = (utilidadNeta / totalIngresos) * 100;
+  if (loading) return <div style={{textAlign:"center", padding:"50px"}}>Calculando estado financiero...</div>;
+  if (!data) return <div style={{textAlign:"center", padding:"50px"}}>Sin datos</div>;
+
+  const totalActivos = data.balance.efectivo_caja + data.balance.saldo_bancos + data.balance.inventario + data.balance.activos_fijos;
+  const totalPasivos = data.balance.deuda_pendiente;
+  const totalCapital = data.balance.utilidad_acumulada; // Simplificado (asumiendo capital inicial 0)
 
   return (
     <div>
-      <SectionHeader
-        title="Contabilidad"
-        sub="Estado de Resultados y situación financiera"
-        actions={
-          <select 
-            value={periodo} 
-            onChange={(e) => setPeriodo(e.target.value)}
-            style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--card)", color: "var(--foreground)", fontSize: "13px", outline: "none" }}
-          >
-            <option value="Septiembre 2026">Septiembre 2026</option>
-            <option value="Agosto 2026">Agosto 2026</option>
-            <option value="Julio 2026">Julio 2026</option>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <div>
+          <h1 style={{ fontSize: "24px", fontWeight: 700, margin: 0 }}>Contabilidad y Finanzas</h1>
+          <p style={{ color: "#6b7280", margin: "4px 0 0" }}>Estado de Resultados y Balance General</p>
+        </div>
+        <div style={{ display: "flex", gap: "12px" }}>
+          <select value={mes} onChange={e => setMes(parseInt(e.target.value))} style={{ padding: "10px", border: "1px solid #d1d5db", borderRadius: "8px", fontWeight: 600 }}>
+            {MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
           </select>
-        }
-      />
-
-      {/* Tarjetas de Resumen Financiero */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "24px" }}>
-        <Card style={{ padding: "20px" }}>
-          <div style={{ fontSize: "12px", color: "var(--muted-foreground)", marginBottom: "8px" }}>Ingresos Totales</div>
-          <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--success)", fontFamily: "'DM Serif Display', serif" }}>
-            ${totalIngresos.toLocaleString("en-US", {minimumFractionDigits: 2})}
-          </div>
-        </Card>
-        <Card style={{ padding: "20px" }}>
-          <div style={{ fontSize: "12px", color: "var(--muted-foreground)", marginBottom: "8px" }}>Costos y Gastos</div>
-          <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--danger)", fontFamily: "'DM Serif Display', serif" }}>
-            ${(totalCostos + totalGastos).toLocaleString("en-US", {minimumFractionDigits: 2})}
-          </div>
-        </Card>
-        <Card style={{ padding: "20px" }}>
-          <div style={{ fontSize: "12px", color: "var(--muted-foreground)", marginBottom: "8px" }}>Utilidad Neta</div>
-          <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--primary)", fontFamily: "'DM Serif Display', serif" }}>
-            ${utilidadNeta.toLocaleString("en-US", {minimumFractionDigits: 2})}
-          </div>
-        </Card>
-        <Card style={{ padding: "20px" }}>
-          <div style={{ fontSize: "12px", color: "var(--muted-foreground)", marginBottom: "8px" }}>Margen de Ganancia</div>
-          <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--foreground)", fontFamily: "'DM Serif Display', serif" }}>
-            {margenNeto.toFixed(1)}%
-          </div>
-        </Card>
-      </div>
-
-      {/* Reporte Detallado (Estado de Resultados) */}
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "24px" }}>
-        
-        {/* Tabla del Estado de Resultados */}
-        <Card>
-          <div style={{ padding: "20px", borderBottom: "1px solid var(--border)" }}>
-            <h3 style={{ margin: 0, fontFamily: "'DM Serif Display', serif" }}>Estado de Resultados — {periodo}</h3>
-            <p style={{ margin: "4px 0 0", fontSize: "12px", color: "var(--muted-foreground)" }}>Nathalie's Nails & Lashes</p>
-          </div>
-          
-          <div style={{ padding: "20px" }}>
-            {/* Ingresos */}
-            <div style={{ marginBottom: "24px" }}>
-              <div style={{ fontSize: "11px", fontWeight: "bold", color: "var(--success)", letterSpacing: "1px", marginBottom: "8px" }}>INGRESOS</div>
-              {datos.ingresos.map((item: any, i: number) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "14px", paddingLeft: "16px" }}>
-                  <span>{item.concepto}</span>
-                  <span style={{ fontFamily: "'DM Mono', monospace" }}>${item.monto.toLocaleString("en-US", {minimumFractionDigits: 2})}</span>
-                </div>
-              ))}
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", marginTop: "8px", borderTop: "1px solid var(--border)", fontWeight: "bold" }}>
-                <span>Total Ingresos</span>
-                <span style={{ fontFamily: "'DM Mono', monospace", color: "var(--success)" }}>${totalIngresos.toLocaleString("en-US", {minimumFractionDigits: 2})}</span>
-              </div>
-            </div>
-
-            {/* Costos */}
-            <div style={{ marginBottom: "24px" }}>
-              <div style={{ fontSize: "11px", fontWeight: "bold", color: "var(--warning)", letterSpacing: "1px", marginBottom: "8px" }}>COSTOS DE VENTA</div>
-              {datos.costos.map((item: any, i: number) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "14px", paddingLeft: "16px" }}>
-                  <span>{item.concepto}</span>
-                  <span style={{ fontFamily: "'DM Mono', monospace" }}>${item.monto.toLocaleString("en-US", {minimumFractionDigits: 2})}</span>
-                </div>
-              ))}
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", marginTop: "8px", borderTop: "1px solid var(--border)", fontWeight: "bold" }}>
-                <span>Utilidad Bruta</span>
-                <span style={{ fontFamily: "'DM Mono', monospace" }}>${utilidadBruta.toLocaleString("en-US", {minimumFractionDigits: 2})}</span>
-              </div>
-            </div>
-
-            {/* Gastos */}
-            <div style={{ marginBottom: "24px" }}>
-              <div style={{ fontSize: "11px", fontWeight: "bold", color: "var(--danger)", letterSpacing: "1px", marginBottom: "8px" }}>GASTOS OPERATIVOS</div>
-              {datos.gastos.map((item: any, i: number) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "14px", paddingLeft: "16px" }}>
-                  <span>{item.concepto}</span>
-                  <span style={{ fontFamily: "'DM Mono', monospace" }}>${item.monto.toLocaleString("en-US", {minimumFractionDigits: 2})}</span>
-                </div>
-              ))}
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", marginTop: "8px", borderTop: "1px solid var(--border)", fontWeight: "bold" }}>
-                <span>Total Gastos</span>
-                <span style={{ fontFamily: "'DM Mono', monospace", color: "var(--danger)" }}>${totalGastos.toLocaleString("en-US", {minimumFractionDigits: 2})}</span>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        {/* Panel Lateral de Acciones */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          <Card style={{ padding: "24px", textAlign: "center", background: "rgba(61,139,101,0.05)", border: "1px solid rgba(61,139,101,0.2)" }}>
-            <div style={{ fontSize: "12px", color: "var(--muted-foreground)", marginBottom: "8px" }}>UTILIDAD NETA DEL PERIODO</div>
-            <div style={{ fontSize: "32px", fontWeight: "bold", color: "var(--success)", fontFamily: "'DM Serif Display', serif", marginBottom: "4px" }}>
-              ${utilidadNeta.toLocaleString("en-US", {minimumFractionDigits: 2})}
-            </div>
-            <Badge variant="success">Ganancia</Badge>
-          </Card>
-
-          <Card style={{ padding: "20px" }}>
-            <h4 style={{ margin: "0 0 16px", fontSize: "14px", fontWeight: 600 }}>Acciones</h4>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              <Button variant="secondary" style={{ width: "100%" }}>📄 Exportar a PDF</Button>
-              <Button variant="secondary" style={{ width: "100%" }}>📊 Exportar a Excel</Button>
-            </div>
-          </Card>
-
-          <Card style={{ padding: "20px" }}>
-            <h4 style={{ margin: "0 0 16px", fontSize: "14px", fontWeight: 600 }}>Indicadores</h4>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "13px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "var(--muted-foreground)" }}>Margen Bruto</span>
-                <span style={{ fontWeight: 600 }}>{((utilidadBruta / totalIngresos) * 100).toFixed(1)}%</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "var(--muted-foreground)" }}>Margen Neto</span>
-                <span style={{ fontWeight: 600 }}>{margenNeto.toFixed(1)}%</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "var(--muted-foreground)" }}>Gasto más alto</span>
-                <span style={{ fontWeight: 600 }}>Alquiler</span>
-              </div>
-            </div>
-          </Card>
+          <select value={anio} onChange={e => setAnio(parseInt(e.target.value))} style={{ padding: "10px", border: "1px solid #d1d5db", borderRadius: "8px", fontWeight: 600 }}>
+            {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
         </div>
       </div>
+
+      {/* SECCIÓN 1: ESTADO DE RESULTADOS (DEL MES) */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "24px" }}>
+        <Card>
+          <div style={{ padding: "20px" }}>
+            <div style={{ fontSize: "12px", color: "#6b7280", fontWeight: 600, textTransform: "uppercase" }}>Ingresos del Mes</div>
+            <div style={{ fontSize: "26px", fontWeight: 700, color: "#10b981", margin: "8px 0" }}>{fmt(data.mes.ingresos)}</div>
+          </div>
+        </Card>
+        <Card>
+          <div style={{ padding: "20px" }}>
+            <div style={{ fontSize: "12px", color: "#6b7280", fontWeight: 600, textTransform: "uppercase" }}>Egresos del Mes</div>
+            <div style={{ fontSize: "26px", fontWeight: 700, color: "#ef4444", margin: "8px 0" }}>{fmt(data.mes.egresos)}</div>
+          </div>
+        </Card>
+        <Card>
+          <div style={{ padding: "20px" }}>
+            <div style={{ fontSize: "12px", color: "#6b7280", fontWeight: 600, textTransform: "uppercase" }}>Utilidad Neta (Mes)</div>
+            <div style={{ fontSize: "26px", fontWeight: 700, color: data.mes.utilidad >= 0 ? "#3b82f6" : "#ef4444", margin: "8px 0" }}>{fmt(data.mes.utilidad)}</div>
+          </div>
+        </Card>
+      </div>
+
+      {/* SECCIÓN 2: BALANCE GENERAL */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "24px", marginBottom: "24px" }}>
+        {/* ACTIVOS */}
+        <Card>
+          <div style={{ padding: "24px" }}>
+            <h3 style={{ marginTop: 0, color: "#10b981", borderBottom: "2px solid #10b981", paddingBottom: "10px" }}>ACTIVOS</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{color: "#6b7280"}}>💵 Efectivo en Caja</span>
+                <strong>{fmt(data.balance.efectivo_caja)}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{color: "#6b7280"}}>🏦 Saldo en Bancos/Transf.</span>
+                <strong>{fmt(data.balance.saldo_bancos)}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{color: "#6b7280"}}>📦 Valor Inventario</span>
+                <strong>{fmt(data.balance.inventario)}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{color: "#6b7280"}}> Activos Fijos</span>
+                <strong>{fmt(data.balance.activos_fijos)}</strong>
+              </div>
+              <div style={{ borderTop: "2px solid #e5e7eb", paddingTop: "12px", display: "flex", justifyContent: "space-between", fontSize: "18px", fontWeight: 700, color: "#10b981" }}>
+                <span>TOTAL ACTIVOS</span>
+                <span>{fmt(totalActivos)}</span>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* PASIVOS */}
+        <Card>
+          <div style={{ padding: "24px" }}>
+            <h3 style={{ marginTop: 0, color: "#f59e0b", borderBottom: "2px solid #f59e0b", paddingBottom: "10px" }}>PASIVOS</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{color: "#6b7280"}}>📄 Cuentas por Pagar</span>
+                <strong>{fmt(data.balance.deuda_pendiente)}</strong>
+              </div>
+              <div style={{ borderTop: "2px solid #e5e7eb", paddingTop: "12px", display: "flex", justifyContent: "space-between", fontSize: "18px", fontWeight: 700, color: "#f59e0b" }}>
+                <span>TOTAL PASIVOS</span>
+                <span>{fmt(totalPasivos)}</span>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* CAPITAL CONTABLE */}
+        <Card>
+          <div style={{ padding: "24px" }}>
+            <h3 style={{ marginTop: 0, color: "#3b82f6", borderBottom: "2px solid #3b82f6", paddingBottom: "10px" }}>CAPITAL CONTABLE</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{color: "#6b7280"}}>📈 Utilidad Acumulada</span>
+                <strong>{fmt(data.balance.utilidad_acumulada)}</strong>
+              </div>
+              <div style={{ borderTop: "2px solid #e5e7eb", paddingTop: "12px", display: "flex", justifyContent: "space-between", fontSize: "18px", fontWeight: 700, color: "#3b82f6" }}>
+                <span>TOTAL CAPITAL</span>
+                <span>{fmt(totalCapital)}</span>
+              </div>
+              
+              {/* Ecuación contable */}
+              <div style={{ marginTop: "20px", padding: "12px", background: "#f0f9ff", borderRadius: "8px", fontSize: "12px", textAlign: "center" }}>
+                <strong>Ecuación:</strong> Activo ({fmt(totalActivos)}) = Pasivo ({fmt(totalPasivos)}) + Capital ({fmt(totalCapital)})
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* SECCIÓN 3: GESTIÓN DE ACTIVOS FIJOS */}
+      <Card>
+        <div style={{ padding: "24px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+            <h3 style={{ margin: 0 }}>🪑 Registro de Activos Fijos</h3>
+            <Button onClick={() => setShowModal(true)}>+ Nuevo Activo</Button>
+          </div>
+          
+          {activos.length === 0 ? (
+            <p style={{ color: "#6b7280", textAlign: "center" }}>No hay activos fijos registrados.</p>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "2px solid #e5e7eb", textAlign: "left" }}>
+                  <th style={{ padding: "10px" }}>NOMBRE</th>
+                  <th style={{ padding: "10px" }}>CATEGORÍA</th>
+                  <th style={{ padding: "10px" }}>FECHA COMPRA</th>
+                  <th style={{ padding: "10px", textAlign: "right" }}>VALOR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activos.map((a: any) => (
+                  <tr key={a.id} style={{ borderBottom: "1px solid #e5e7eb" }}>
+                    <td style={{ padding: "10px", fontWeight: 600 }}>{a.nombre}</td>
+                    <td style={{ padding: "10px" }}><Badge variant="muted">{a.categoria}</Badge></td>
+                    <td style={{ padding: "10px" }}>{new Date(a.fecha_compra).toLocaleDateString('es-MX')}</td>
+                    <td style={{ padding: "10px", textAlign: "right", fontWeight: 700 }}>{fmt(a.valor_compra)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </Card>
+
+      {/* MODAL AGREGAR ACTIVO */}
+      {showModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000 }} onClick={() => setShowModal(false)}>
+          <div style={{ background: "white", padding: "30px", borderRadius: "12px", width: "100%", maxWidth: "400px" }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Registrar Activo Fijo</h3>
+            <form onSubmit={handleAddActivo} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <input required placeholder="Nombre (ej: Lámpara UV)" value={newActivo.nombre} onChange={e => setNewActivo({...newActivo, nombre: e.target.value})} style={{ padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px" }} />
+              <select value={newActivo.categoria} onChange={e => setNewActivo({...newActivo, categoria: e.target.value})} style={{ padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px" }}>
+                <option value="Equipo">Equipo</option>
+                <option value="Mobiliario">Mobiliario</option>
+                <option value="Tecnología">Tecnología</option>
+                <option value="Vehículo">Vehículo</option>
+              </select>
+              <input required type="number" step="0.01" placeholder="Valor de compra" value={newActivo.valor_compra} onChange={e => setNewActivo({...newActivo, valor_compra: e.target.value})} style={{ padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px" }} />
+              <input required type="date" value={newActivo.fecha_compra} onChange={e => setNewActivo({...newActivo, fecha_compra: e.target.value})} style={{ padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px" }} />
+              <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
+                <button type="button" onClick={() => setShowModal(false)} style={{ flex: 1, padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px", background: "white", cursor: "pointer" }}>Cancelar</button>
+                <button type="submit" style={{ flex: 1, padding: "10px", border: "none", borderRadius: "6px", background: "#10b981", color: "white", cursor: "pointer" }}>Guardar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

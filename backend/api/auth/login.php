@@ -13,6 +13,7 @@ $data = json_decode(file_get_contents("php://input"), true);
 $email = $data['email'] ?? '';
 $password = $data['password'] ?? '';
 
+error_log("INTENTO LOGIN -> Email: " . $email . " | Password recibida: '" . $password . "'");
 // Validar que no estén vacíos
 if (empty($email) || empty($password)) {
     http_response_code(400);

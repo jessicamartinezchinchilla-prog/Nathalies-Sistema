@@ -2,7 +2,11 @@ node_modules/
 vendor/
 dist/
 .vite/
-.env
+.env    
 .env.local
 Thumbs.db
 desktop.ini
+
+# SEGURIDAD: No subir credenciales de base de datos ni certificados
+backend/config/db.php
+backend/config/ca.pem
