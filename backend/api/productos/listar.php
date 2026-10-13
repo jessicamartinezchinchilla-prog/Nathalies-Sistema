@@ -1,5 +1,14 @@
 <?php
-require_once '../../config/db.php';
+// CORS
+header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type");
+header("Content-Type: application/json; charset=UTF-8");
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
@@ -8,9 +17,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 }
 
 try {
-    // ============================================
-    // 1. ESTADÍSTICAS GLOBALES (sin filtros)
-    // ============================================
+    require_once '../../config/db.php';
+
+    // ESTADÍSTICAS GLOBALES
     $stats = $pdo->query("
         SELECT 
             COUNT(*) as total,
@@ -20,9 +29,7 @@ try {
         FROM productos
     ")->fetch();
 
-    // ============================================
-    // 2. LISTA DE PRODUCTOS (con filtros)
-    // ============================================
+    // FILTROS
     $where = [];
     $params = [];
 
@@ -51,7 +58,10 @@ try {
         $where[] = "stock <= stock_minimo";
     }
 
-    $sql = "SELECT id, codigo, nombre, categoria, precio_venta, costo, stock, stock_minimo, estado, created_at, updated_at FROM productos";
+    // CORREGIDO: Sin JOIN, seleccionando categoria directamente de productos
+    $sql = "SELECT id, codigo, nombre, categoria, precio_venta, costo, stock, stock_minimo, estado, created_at, updated_at 
+            FROM productos";
+    
     if (!empty($where)) {
         $sql .= " WHERE " . implode(" AND ", $where);
     }

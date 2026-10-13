@@ -1,4 +1,17 @@
 <?php
+// 1. ENCABEZADOS CORS (¡Esto es lo que faltaba y causaba el error!)
+header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type");
+header("Content-Type: application/json; charset=UTF-8");
+
+// Manejar la petición de prueba del navegador (OPTIONS)
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+// 2. TU CÓDIGO ORIGINAL (que está perfecto)
 require_once '../../config/db.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
