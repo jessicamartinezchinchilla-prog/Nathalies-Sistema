@@ -1,9 +1,21 @@
 <?php
-require_once '../../config/db.php';
-
+// 1. ENCABEZADOS CORS (Obligatorios para que React pueda conectar)
 header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
 header("Content-Type: application/json; charset=UTF-8");
 
+// 2. MANEJAR LA PETICIÓN DE PRUEBA DEL NAVEGADOR (OPTIONS)
+// ¡Esta es la pieza que faltaba y causaba el error de conexión!
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+// 3. CONEXIÓN A LA BASE DE DATOS
+require_once '../../config/db.php';
+
+// 4. VERIFICAR QUE SEA POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(["error" => "Método no permitido"]);
@@ -43,11 +55,11 @@ try {
         ':codigo' => $codigoCompra,
         ':fecha' => $data['fecha'],
         ':proveedor_id' => intval($data['proveedor_id']),
-        ':total' => $data['total'],
+        ':total' => floatval($data['total']),
         ':estado_pago' => $data['estado_pago'] ?? 'Pendiente',
         ':metodo_pago' => $data['metodo_pago'] ?? null,
         ':fecha_vencimiento' => $data['fecha_vencimiento'] ?? null,
-        ':usuario_id' => $data['usuario_id'] ?? 1
+        ':usuario_id' => intval($data['usuario_id'] ?? 1)
     ]);
     
     $compraId = $pdo->lastInsertId();
@@ -62,23 +74,23 @@ try {
         $stmtDetalle->execute([
             ':compra_id' => $compraId,
             ':tipo' => $detalle['tipo'],
-            ':item_id' => $detalle['item_id'],
-            ':cantidad' => $detalle['cantidad'],
-            ':costo_unitario' => $detalle['costo_unitario'],
-            ':subtotal' => $detalle['subtotal']
+            ':item_id' => intval($detalle['item_id']),
+            ':cantidad' => floatval($detalle['cantidad']),
+            ':costo_unitario' => floatval($detalle['costo_unitario']),
+            ':subtotal' => floatval($detalle['subtotal'])
         ]);
 
         if ($detalle['tipo'] === 'producto') {
             $pdo->prepare("UPDATE productos SET stock = stock + :cantidad WHERE id = :id")
-                ->execute([':cantidad' => $detalle['cantidad'], ':id' => $detalle['item_id']]);
+                ->execute([':cantidad' => floatval($detalle['cantidad']), ':id' => intval($detalle['item_id'])]);
         } elseif ($detalle['tipo'] === 'insumo') {
             $pdo->prepare("UPDATE insumos SET stock = stock + :cantidad WHERE id = :id")
-                ->execute([':cantidad' => $detalle['cantidad'], ':id' => $detalle['item_id']]);
+                ->execute([':cantidad' => floatval($detalle['cantidad']), ':id' => intval($detalle['item_id'])]);
         }
     }
 
     // ⭐ SI ES PENDIENTE, CREAR CUENTA POR PAGAR
-    if ($data['estado_pago'] === 'Pendiente' && !empty($data['fecha_vencimiento'])) {
+    if (($data['estado_pago'] ?? 'Pendiente') === 'Pendiente' && !empty($data['fecha_vencimiento'])) {
         $stmtCuenta = $pdo->prepare("
             INSERT INTO cuentas_por_pagar (compra_id, proveedor_id, monto_original, monto_pagado, fecha_vencimiento, estado)
             VALUES (:compra_id, :proveedor_id, :monto, 0, :vencimiento, 'Pendiente')
@@ -86,7 +98,7 @@ try {
         $stmtCuenta->execute([
             ':compra_id' => $compraId,
             ':proveedor_id' => intval($data['proveedor_id']),
-            ':monto' => $data['total'],
+            ':monto' => floatval($data['total']),
             ':vencimiento' => $data['fecha_vencimiento']
         ]);
     }

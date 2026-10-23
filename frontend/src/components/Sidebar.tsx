@@ -1,109 +1,320 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
-type NavItem = {
-  id: string;
-  label: string;
-  icon: string;
-  children?: { id: string; label: string }[];
-};
+interface SidebarProps {
+  current: string;
+  onNavigate: (page: string) => void;
+  onLogout: () => void;
+}
 
-const nav: NavItem[] = [
-  { id: "dashboard", label: "Dashboard", icon: "" },
-  {
-    id: "ventas", label: "Ventas", icon: "",
-    children: [{ id: "nueva-venta", label: "Nueva venta" }, { id: "historial-ventas", label: "Historial" }, { id: "cierre-caja", label: "Cierre de caja" }],
-  },
-  {
-    id: "inventario-op", label: "Inventario y Operaciones", icon: "",
-    children: [{ id: "productos", label: "Productos" }, { id: "insumos", label: "Insumos" }, { id: "servicios", label: "Servicios" },],
-  },
-  { id: "compras", label: "Compras", icon: "" },
-  { id: "proveedores", label: "Proveedores", icon: "" },
-  { id: "cuentas-pagar", label: "Cuentas por pagar", icon: "" },
-  { id: "gastos", label: "Gastos", icon: "" },
-  { id: "contabilidad", label: "Contabilidad", icon: "" },
-  { id: "reportes", label: "Reportes", icon: "" },
-  {
-    id: "config-group", label: "Configuración", icon: "",
-    children: [{ id: "usuarios", label: "Usuarios" }, { id: "configuracion", label: "General" }],
-  },
-];
+export default function Sidebar({ current, onNavigate, onLogout }: SidebarProps) {
+  const [usuario, setUsuario] = useState<any>(null);
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({
+    ventas: true,
+    inventario: true,
+    configuracion: false,
+  });
 
-type Props = { current: string; onNavigate: (id: string) => void };
+  useEffect(() => {
+    try {
+      const userStr = localStorage.getItem("user");
+      if (userStr && userStr !== "undefined" && userStr !== "null") {
+        setUsuario(JSON.parse(userStr));
+      } else {
+        localStorage.removeItem("user");
+      }
+    } catch (error) {
+      console.error("Error al leer usuario:", error);
+      localStorage.removeItem("user");
+    }
+  }, []);
 
-export default function Sidebar({ current, onNavigate }: Props) {
-  const [open, setOpen] = useState<Record<string, boolean>>({ "inventario-op": true });
-  const toggle = (id: string) => setOpen((prev) => ({ ...prev, [id]: !prev[id] }));
+  const toggleMenu = (menu: string) => {
+    setOpenMenus((prev) => ({ ...prev, [menu]: !prev[menu] }));
+  };
 
-  const isActive = (item: NavItem) => item.id === current || item.children?.some((c) => c.id === current);
+  const menuItems = [
+    { id: "dashboard", label: "Dashboard", icon: "" },
+    {
+      id: "ventas",
+      label: "Ventas",
+      icon: "-",
+      children: [
+        { id: "nueva-venta", label: "Nueva Venta" },
+        { id: "historial-ventas", label: "Historial de Ventas" },
+      ],
+    },
+    {
+      id: "inventario",
+      label: "Inventario y Operaciones",
+      icon: "-",
+      children: [
+        { id: "productos", label: "Productos" },
+        { id: "insumos", label: "Insumos" },
+        { id: "servicios", label: "Servicios" },
+      ],
+    },
+    { id: "compras", label: "Compras", icon:"-"},
+    { id: "proveedores", label: "Proveedores", icon: "-"},
+    { id: "cuentas-pagar", label: "Cuentas por pagar", icon: "-"},
+    { id: "gastos", label: "Gastos", icon: "-"},
+    { id: "contabilidad", label: "Contabilidad", icon: "-"},
+    { id: "reportes", label: "Reportes", icon: "-"},
+    {
+      id: "configuracion",
+      label: "Configuración",
+      icon: "-",
+      children: [{ id: "usuarios", label: "Usuarios" }],
+    },
+  ];
+
+  const isActive = (id: string) => current === id;
 
   return (
-    <aside style={{ width: "260px", background: "#190C30", height: "100vh", display: "flex", flexDirection: "column", color: "#A0A0B0", flexShrink: 0 }}>
-      {/* Logo */}
-      <div style={{ padding: "24px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: "12px" }}>
-        <div style={{ width: "36px", height: "36px", background: "#B5738A", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: "bold", fontSize: "18px", fontFamily: "'DM Serif Display', serif" }}>N</div>
+    <div
+      style={{
+        width: "260px",
+        background: "#190C30",
+        color: "white",
+        display: "flex",
+        flexDirection: "column",
+        height: "100vh",
+        flexShrink: 0,
+      }}
+    >
+      {/* LOGO */}
+      <div
+        style={{
+          padding: "20px 24px",
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          borderBottom: "1px solid rgba(255,255,255,0.1)",
+        }}
+      >
+        <div
+          style={{
+            width: "40px",
+            height: "40px",
+            background: "#c08497",
+            borderRadius: "10px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "white",
+            fontSize: "20px",
+            fontWeight: "bold",
+          }}
+        >
+          N
+        </div>
         <div>
-          <div style={{ color: "#fff", fontWeight: 600, fontSize: "15px", lineHeight: 1.2 }}>Nathalie's</div>
-          <div style={{ fontSize: "11px", opacity: 0.6 }}>Nails & Lashes</div>
+          <h1 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>
+            Nathalie's
+          </h1>
+          <p style={{ margin: 0, fontSize: "11px", color: "#a78bfa" }}>
+            Nails & Lashes
+          </p>
         </div>
       </div>
 
-      {/* Menú */}
-      <nav style={{ flex: 1, overflowY: "auto", padding: "16px 12px" }}>
-        {nav.map((item) => {
-          const active = isActive(item);
-          const expanded = open[item.id] ?? active;
-          const hasChildren = !!item.children?.length;
+      {/* MENÚ DE NAVEGACIÓN */}
+      <nav style={{ flex: 1, overflowY: "auto", padding: "16px 0" }}>
+        {menuItems.map((item: any) => {
+          const hasChildren = item.children && item.children.length > 0;
+          const isOpen = openMenus[item.id];
+
+          if (hasChildren) {
+            return (
+              <div key={item.id}>
+                <button
+                  onClick={() => toggleMenu(item.id)}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 24px",
+                    background: "transparent",
+                    border: "none",
+                    color: "white",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <span style={{ fontSize: "16px" }}>{item.icon}</span>
+                    {item.label}
+                  </span>
+                  <span
+                    style={{
+                      transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
+                      transition: "transform 0.2s",
+                      fontSize: "12px",
+                    }}
+                  >
+                    ▼
+                  </span>
+                </button>
+                {isOpen && (
+                  <div style={{ paddingLeft: "48px" }}>
+                    {item.children.map((child: any) => (
+                      <button
+                        key={child.id}
+                        onClick={() => onNavigate(child.id)}
+                        style={{
+                          width: "100%",
+                          display: "block",
+                          padding: "10px 16px",
+                          background: isActive(child.id)
+                            ? "rgba(192, 132, 151, 0.2)"
+                            : "transparent",
+                          border: "none",
+                          borderLeft: isActive(child.id)
+                            ? "3px solid #c08497"
+                            : "3px solid transparent",
+                          color: isActive(child.id) ? "#c08497" : "#d1d5db",
+                          fontSize: "13px",
+                          cursor: "pointer",
+                          textAlign: "left",
+                        }}
+                      >
+                        {child.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
 
           return (
-            <div key={item.id} style={{ marginBottom: "4px" }}>
-              <button
-                onClick={() => { if (hasChildren) { toggle(item.id); if (!expanded && item.children) onNavigate(item.children[0].id); } else { onNavigate(item.id); } }}
-                style={{
-                  width: "100%", display: "flex", alignItems: "center", gap: "12px", padding: "10px 12px", borderRadius: "8px",
-                  background: active && !hasChildren ? "rgba(181, 115, 138, 0.1)" : "transparent",
-                  color: active ? "#fff" : "#A0A0B0", fontWeight: active ? 500 : 400,
-                  border: "none", cursor: "pointer", textAlign: "left", fontSize: "13px", transition: "all 0.2s"
-                }}
-                onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "#2B2B40"; }}
-                onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
-              >
-                <span style={{ flex: 1 }}>{item.label}</span>
-                {hasChildren && <span style={{ fontSize: "10px", transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.2s" }}>▶</span>}
-              </button>
-
-              {hasChildren && expanded && (
-                <div style={{ marginLeft: "20px", paddingLeft: "12px", borderLeft: "1px solid rgba(255,255,255,0.05)", marginTop: "4px", marginBottom: "4px" }}>
-                  {item.children!.map((child) => (
-                    <button
-                      key={child.id} onClick={() => onNavigate(child.id)}
-                      style={{
-                        width: "100%", textAlign: "left", padding: "8px 12px", borderRadius: "6px", fontSize: "12px",
-                        background: current === child.id ? "rgba(181, 115, 138, 0.1)" : "transparent",
-                        color: current === child.id ? "#fff" : "#A0A0B0", fontWeight: current === child.id ? 500 : 400,
-                        border: "none", cursor: "pointer", marginBottom: "2px", transition: "all 0.2s"
-                      }}
-                      onMouseEnter={(e) => { if (current !== child.id) e.currentTarget.style.background = "#2B2B40"; }}
-                      onMouseLeave={(e) => { if (current !== child.id) e.currentTarget.style.background = "transparent"; }}
-                    >
-                      {child.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <button
+              key={item.id}
+              onClick={() => onNavigate(item.id)}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                padding: "12px 24px",
+                background: isActive(item.id)
+                  ? "rgba(192, 132, 151, 0.2)"
+                  : "transparent",
+                border: "none",
+                borderLeft: isActive(item.id)
+                  ? "3px solid #c08497"
+                  : "3px solid transparent",
+                color: isActive(item.id) ? "#c08497" : "white",
+                fontSize: "14px",
+                fontWeight: isActive(item.id) ? 600 : 500,
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              <span style={{ fontSize: "16px" }}>{item.icon}</span>
+              {item.label}
+            </button>
           );
         })}
       </nav>
 
-      {/* Usuario Footer */}
-      <div style={{ padding: "16px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: "10px" }}>
-        <div style={{ width: "32px", height: "32px", background: "#B5738A", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "12px", fontWeight: 600 }}>A</div>
-        <div style={{ overflow: "hidden" }}>
-          <div style={{ color: "#fff", fontSize: "12px", fontWeight: 500, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>Administrador</div>
-          <div style={{ fontSize: "11px", opacity: 0.5, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>admin@nathalies.com</div>
+      {/* USUARIO Y CERRAR SESIÓN (Al final, como en tu diseño original) */}
+      <div
+        style={{
+          padding: "16px 24px",
+          borderTop: "1px solid rgba(255,255,255,0.1)",
+          background: "rgba(0,0,0,0.2)",
+        }}
+      >
+        {/* Info del usuario */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            marginBottom: "12px",
+          }}
+        >
+          <div
+            style={{
+              width: "36px",
+              height: "36px",
+              borderRadius: "50%",
+              background: "#c08497",
+              color: "white",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "14px",
+              fontWeight: 600,
+            }}
+          >
+            {usuario?.nombre ? usuario.nombre.charAt(0).toUpperCase() : "A"}
+          </div>
+          <div style={{ flex: 1, overflow: "hidden" }}>
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "white",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {usuario?.nombre || "Administrador"}
+            </div>
+            <div style={{ fontSize: "11px", color: "#a78bfa" }}>
+              {usuario?.email || "admin@nathalies.com"}
+            </div>
+          </div>
         </div>
+
+        {/* Botón Cerrar Sesión con ícono de puertita */}
+        <button
+          onClick={onLogout}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px",
+            padding: "10px",
+            border: "1px solid rgba(239, 68, 68, 0.3)",
+            borderRadius: "8px",
+            background: "rgba(239, 68, 68, 0.1)",
+            color: "#ef4444",
+            fontSize: "13px",
+            fontWeight: 600,
+            cursor: "pointer",
+            transition: "all 0.2s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)";
+          }}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+          Cerrar Sesión
+        </button>
       </div>
-    </aside>
+    </div>
   );
 }

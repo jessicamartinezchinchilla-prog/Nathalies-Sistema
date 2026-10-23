@@ -1,8 +1,18 @@
 <?php
-require_once '../../config/db.php';
-
+// 1. ENCABEZADOS CORS COMPLETOS (¡ESTO ES LO QUE FALTABA!)
 header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
 header("Content-Type: application/json; charset=UTF-8");
+
+// 2. MANEJAR LA PETICIÓN DE PRUEBA DEL NAVEGADOR (OPTIONS)
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+// 3. TU LÓGICA ORIGINAL (Intacta y funcionando)
+require_once '../../config/db.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -28,7 +38,7 @@ try {
         WHERE id = :id
     ");
     $stmt->execute([
-        ':monto_pagado' => $data['monto_pagado'],
+        ':monto_pagado' => floatval($data['monto_pagado']),
         ':id' => intval($data['id'])
     ]);
 

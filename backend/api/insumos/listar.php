@@ -1,5 +1,14 @@
 <?php
-require_once '../../config/db.php';
+// CORS
+header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type");
+header("Content-Type: application/json; charset=UTF-8");
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
@@ -8,7 +17,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 }
 
 try {
-    // ESTADÍSTICAS GLOBALES (sin filtros)
+    require_once '../../config/db.php';
+
+    // ESTADÍSTICAS GLOBALES
     $stats = $pdo->query("
         SELECT 
             COUNT(*) as total,
@@ -18,45 +29,47 @@ try {
         FROM insumos
     ")->fetch();
 
-    // LISTA DE INSUMOS (con filtros)
+    // FILTROS
     $where = [];
     $params = [];
 
     if (!empty($_GET['search'])) {
         $search = '%' . $_GET['search'] . '%';
-        $where[] = "(i.nombre LIKE :search OR i.codigo LIKE :search)";
+        $where[] = "(nombre LIKE :search OR codigo LIKE :search)";
         $params[':search'] = $search;
     }
 
+    // NOTA: El filtro de categoria se quitó porque la columna no existe
+    // Si tu tabla tiene categoria_id, descomenta las siguientes líneas:
+    /*
     if (!empty($_GET['categoria'])) {
-        $where[] = "i.categoria_id = :categoria";
+        $where[] = "categoria_id = :categoria";
         $params[':categoria'] = intval($_GET['categoria']);
     }
+    */
 
     if (!empty($_GET['estado'])) {
-        $where[] = "i.estado = :estado";
+        $where[] = "estado = :estado";
         $params[':estado'] = $_GET['estado'];
     }
 
     if (isset($_GET['costo']) && $_GET['costo'] !== '') {
-        $where[] = "i.costo_unitario = :costo";
+        $where[] = "costo_unitario = :costo";
         $params[':costo'] = floatval($_GET['costo']);
     }
 
     if (isset($_GET['stock_bajo']) && $_GET['stock_bajo'] === 'true') {
-        $where[] = "i.stock <= i.stock_minimo";
+        $where[] = "stock <= stock_minimo";
     }
 
-    // JOIN con categorias para obtener el nombre
-    $sql = "SELECT i.id, i.codigo, i.nombre, i.categoria_id, c.nombre as categoria, 
-                   i.costo_unitario, i.stock, i.stock_minimo, i.estado, i.created_at, i.updated_at 
-            FROM insumos i
-            LEFT JOIN categorias c ON i.categoria_id = c.id";
+    // CORREGIDO: Sin columna 'categoria'
+    $sql = "SELECT id, codigo, nombre, costo_unitario, stock, stock_minimo, estado, created_at, updated_at 
+            FROM insumos";
     
     if (!empty($where)) {
         $sql .= " WHERE " . implode(" AND ", $where);
     }
-    $sql .= " ORDER BY i.nombre ASC";
+    $sql .= " ORDER BY nombre ASC";
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);

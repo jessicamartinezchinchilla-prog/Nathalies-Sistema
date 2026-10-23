@@ -7,6 +7,7 @@ type Producto = {
   nombre: string;
   stock: number;
   stock_minimo?: number;
+  precio_venta?: number; // ✅ Campo correcto según tu base de datos
   costo_unitario?: number;
 };
 
@@ -16,6 +17,7 @@ type Insumo = {
   nombre: string;
   stock: number;
   stock_minimo?: number;
+  precio_venta?: number; // ✅ Campo correcto según tu base de datos
   costo_unitario?: number;
 };
 
@@ -48,6 +50,9 @@ export default function Compras() {
   const [loading, setLoading] = useState(false);
   const [modalExito, setModalExito] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
+  
+  // 🎯 Estado para la cantidad a agregar desde el panel izquierdo
+  const [cantidadAgregar, setCantidadAgregar] = useState(1);
 
   useEffect(() => {
     cargarProductos();
@@ -77,7 +82,7 @@ export default function Compras() {
 
   const cargarProveedores = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/proveedores/listar_activos.php");
+      const res = await fetch("http://localhost:8000/api/proveedores/listar.php");
       const data = await res.json();
       if (data.success) setProveedores(data.proveedores || []);
     } catch (err) {
@@ -86,14 +91,18 @@ export default function Compras() {
   };
 
   const agregarAlCarrito = (tipo: 'producto' | 'insumo', item: any) => {
+    if (cantidadAgregar <= 0) return;
+
     const id = `${tipo}-${item.id}`;
     const existe = carrito.find(i => i.id === id);
-    const costoUnitario = Number(item.costo_unitario || 0);
+    
+    // ✅ AHORA SÍ: Busca primero 'precio_venta', y si no existe, usa fallbacks
+    const costoUnitario = Number(item.precio_venta ?? item.costo_unitario ?? 0);
 
     if (existe) {
       setCarrito(carrito.map(i => 
         i.id === id 
-          ? { ...i, cantidad: i.cantidad + 1, subtotal: (i.cantidad + 1) * costoUnitario }
+          ? { ...i, cantidad: i.cantidad + cantidadAgregar, subtotal: (i.cantidad + cantidadAgregar) * costoUnitario }
           : i
       ));
     } else {
@@ -103,24 +112,13 @@ export default function Compras() {
         item_id: item.id,
         codigo: item.codigo,
         nombre: item.nombre,
-        cantidad: 1,
+        cantidad: cantidadAgregar,
         costo_unitario: costoUnitario,
-        subtotal: costoUnitario
+        subtotal: cantidadAgregar * costoUnitario
       }]);
     }
     setBusqueda("");
-  };
-
-  const actualizarCantidad = (id: string, cantidad: number) => {
-    if (cantidad <= 0) {
-      setCarrito(carrito.filter(i => i.id !== id));
-    } else {
-      setCarrito(carrito.map(i => 
-        i.id === id 
-          ? { ...i, cantidad, subtotal: cantidad * i.costo_unitario }
-          : i
-      ));
-    }
+    setCantidadAgregar(1); // Resetear a 1 después de agregar exitosamente
   };
 
   const total = carrito.reduce((sum, item) => sum + item.subtotal, 0);
@@ -181,14 +179,13 @@ export default function Compras() {
   const productosFiltrados = productos.filter(p => 
     p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
     p.codigo.toLowerCase().includes(busqueda.toLowerCase())
-  ).slice(0, 5);
+  ).slice(0, 8);
 
   const insumosFiltrados = insumos.filter(i => 
     i.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
     i.codigo.toLowerCase().includes(busqueda.toLowerCase())
-  ).slice(0, 5);
+  ).slice(0, 8);
 
-  // Lógica para sugerencias de reabastecimiento
   const sugerencias = [
     ...productos.filter(p => p.stock <= (p.stock_minimo || 5)),
     ...insumos.filter(i => i.stock <= (i.stock_minimo || 5))
@@ -196,7 +193,7 @@ export default function Compras() {
 
   return (
     <div>
-      {/* MODAL ÉXITO */}
+      {/* MODALES */}
       {modalExito && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000 }}>
           <div style={{ background: "white", padding: "30px", borderRadius: "12px", textAlign: "center", maxWidth: "400px" }}>
@@ -206,8 +203,6 @@ export default function Compras() {
           </div>
         </div>
       )}
-
-      {/* MODAL ERROR */}
       {modalError && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000 }}>
           <div style={{ background: "white", padding: "30px", borderRadius: "12px", textAlign: "center", maxWidth: "400px" }}>
@@ -219,9 +214,7 @@ export default function Compras() {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════
-          SECCIÓN DE SUGERENCIAS DE REABASTECIMIENTO
-      ═══════════════════════════════════════════ */}
+      {/* SUGERENCIAS */}
       {sugerencias.length > 0 && (
         <Card style={{ marginBottom: "24px", border: "1px solid #f59e0b", background: "#fffbeb" }}>
           <div style={{ padding: "16px 20px" }}>
@@ -267,35 +260,58 @@ export default function Compras() {
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
-        {/* Panel Izquierdo: Buscador */}
+        
+        {/* ═══════════════════════════════════════════
+            PANEL IZQUIERDO: BUSCADOR + SPINNER DE CANTIDAD
+        ═══════════════════════════════════════════ */}
         <Card>
           <div style={{ padding: "20px" }}>
             <h2 style={{ fontSize: "18px", fontWeight: 600, marginBottom: "16px" }}>Agregar Productos o Insumos</h2>
             
+            {/* 🎯 Spinner de cantidad grande en el panel de agregar */}
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
+              <label style={{ fontSize: "14px", fontWeight: 600, whiteSpace: "nowrap" }}>Cantidad a agregar:</label>
+              <input 
+                type="number" 
+                min="1" 
+                value={cantidadAgregar} 
+                onChange={(e) => setCantidadAgregar(Math.max(1, parseInt(e.target.value) || 1))}
+                style={{ 
+                  width: "80px", 
+                  height: "42px", 
+                  fontSize: "18px", 
+                  textAlign: "center", 
+                  border: "1px solid #d1d5db", 
+                  borderRadius: "8px",
+                  fontWeight: "bold"
+                }} 
+              />
+            </div>
+
             <input
               type="text"
               placeholder="Buscar por nombre o código..."
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              style={{ width: "100%", padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px", marginBottom: "16px" }}
+              style={{ width: "100%", padding: "12px", border: "1px solid #d1d5db", borderRadius: "8px", marginBottom: "16px", fontSize: "15px" }}
             />
 
             <div style={{ maxHeight: "400px", overflowY: "auto" }}>
               {productosFiltrados.map(p => (
-                <div key={p.id} onClick={() => agregarAlCarrito('producto', p)} style={{ display: "flex", justifyContent: "space-between", padding: "10px", border: "1px solid #e5e7eb", borderRadius: "6px", marginBottom: "8px", cursor: "pointer" }}>
+                <div key={p.id} onClick={() => agregarAlCarrito('producto', p)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", border: "1px solid #e5e7eb", borderRadius: "8px", marginBottom: "8px", cursor: "pointer", transition: "background 0.2s" }} onMouseEnter={(e) => e.currentTarget.style.background = "#f9fafb"} onMouseLeave={(e) => e.currentTarget.style.background = "white"}>
                   <div>
-                    <strong>{p.nombre}</strong>
+                    <strong style={{ fontSize: "14px" }}>{p.nombre}</strong>
                     <br/>
-                    <small style={{ color: "#6b7280" }}>{p.codigo} | Stock: {p.stock}</small>
+                    <small style={{ color: p.stock <= (p.stock_minimo || 5) ? "#ef4444" : "#6b7280" }}>{p.codigo} | Stock: {p.stock}</small>
                   </div>
                 </div>
               ))}
               {insumosFiltrados.map(i => (
-                <div key={i.id} onClick={() => agregarAlCarrito('insumo', i)} style={{ display: "flex", justifyContent: "space-between", padding: "10px", border: "1px solid #e5e7eb", borderRadius: "6px", marginBottom: "8px", cursor: "pointer" }}>
+                <div key={i.id} onClick={() => agregarAlCarrito('insumo', i)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", border: "1px solid #e5e7eb", borderRadius: "8px", marginBottom: "8px", cursor: "pointer", transition: "background 0.2s" }} onMouseEnter={(e) => e.currentTarget.style.background = "#f9fafb"} onMouseLeave={(e) => e.currentTarget.style.background = "white"}>
                   <div>
-                    <strong>{i.nombre}</strong>
+                    <strong style={{ fontSize: "14px" }}>{i.nombre}</strong>
                     <br/>
-                    <small style={{ color: "#6b7280" }}>{i.codigo} | Stock: {i.stock}</small>
+                    <small style={{ color: i.stock <= (i.stock_minimo || 5) ? "#ef4444" : "#6b7280" }}>{i.codigo} | Stock: {i.stock}</small>
                   </div>
                 </div>
               ))}
@@ -306,7 +322,9 @@ export default function Compras() {
           </div>
         </Card>
 
-        {/* Panel Derecho: Carrito y Pago */}
+        {/* ═══════════════════════════════════════════
+            PANEL DERECHO: CARRITO (LIMPIO, SIN + y -)
+        ═══════════════════════════════════════════ */}
         <Card>
           <div style={{ padding: "20px" }}>
             <h2 style={{ fontSize: "18px", fontWeight: 600, marginBottom: "16px" }}>Carrito de Compra</h2>
@@ -318,21 +336,26 @@ export default function Compras() {
             ) : (
               <div style={{ maxHeight: "250px", overflowY: "auto", marginBottom: "16px" }}>
                 {carrito.map(item => (
-                  <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px", borderBottom: "1px solid #eee" }}>
+                  <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", borderBottom: "1px solid #f3f4f6" }}>
                     <div style={{ flex: 1 }}>
-                      <strong>{item.nombre}</strong>
+                      <strong style={{ fontSize: "14px" }}>{item.nombre}</strong>
                       <br/>
                       <small style={{ color: "#6b7280" }}>{item.tipo === 'producto' ? 'Producto' : 'Insumo'} | {item.codigo}</small>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <button onClick={() => actualizarCantidad(item.id, item.cantidad - 1)} style={{ width: "28px", height: "28px", border: "1px solid #d1d5db", borderRadius: "4px", background: "white", cursor: "pointer" }}>-</button>
-                      <span style={{ fontWeight: 600, minWidth: "30px", textAlign: "center" }}>{item.cantidad}</span>
-                      <button onClick={() => actualizarCantidad(item.id, item.cantidad + 1)} style={{ width: "28px", height: "28px", border: "1px solid #d1d5db", borderRadius: "4px", background: "white", cursor: "pointer" }}>+</button>
-                      <button onClick={() => setCarrito(carrito.filter(i => i.id !== item.id))} style={{ marginLeft: "8px", background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}>🗑️</button>
+                    
+                    {/* 🎯 Solo muestra la cantidad y el botón de eliminar */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <span style={{ fontWeight: "bold", fontSize: "15px", color: "#4b5563", background: "#f3f4f6", padding: "4px 10px", borderRadius: "6px" }}>
+                        Cant: {item.cantidad}
+                      </span>
+                      <button onClick={() => setCarrito(carrito.filter(i => i.id !== item.id))} style={{ color: "#ef4444", border: "none", background: "#fee2e2", width: "32px", height: "32px", borderRadius: "6px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }} title="Eliminar">
+                        🗑️
+                      </button>
                     </div>
-                    <div style={{ textAlign: "right" }}>
+                    
+                    <div style={{ textAlign: "right", minWidth: "90px" }}>
                       <div style={{ fontSize: "12px", color: "#6b7280" }}>${item.costo_unitario.toFixed(2)} c/u</div>
-                      <strong>${item.subtotal.toFixed(2)}</strong>
+                      <strong style={{ fontSize: "15px", color: "#1f2937" }}>${item.subtotal.toFixed(2)}</strong>
                     </div>
                   </div>
                 ))}

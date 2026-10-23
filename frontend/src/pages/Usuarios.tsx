@@ -9,20 +9,15 @@ type Usuario = {
   estado: string;
 };
 
-type Rol = {
-  id: number;
-  nombre: string;
-};
-
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [roles, setRoles] = useState<Rol[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [showResetPass, setShowResetPass] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [modalExito, setModalExito] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
 
+  // El rol_id se queda en "1" por defecto (Administrador) de forma oculta
   const [formData, setFormData] = useState({
     nombre: "", email: "", password: "", rol_id: "1", estado: "Activo"
   });
@@ -30,20 +25,16 @@ export default function Usuarios() {
 
   useEffect(() => {
     cargarUsuarios();
-    cargarRoles();
   }, []);
 
   const cargarUsuarios = async () => {
-    const res = await fetch("http://localhost:8000/api/usuarios/listar.php");
-    const data = await res.json();
-    if (data.success) setUsuarios(data.usuarios);
-  };
-
-  const cargarRoles = async () => {
-    const res = await fetch("http://localhost:8000/api/roles/listar.php"); // Asumiendo que existe, si no, hardcodeamos
-    const data = await res.json();
-    if (data.success) setRoles(data.roles);
-    else setRoles([{ id: 1, nombre: "Administrador" }, { id: 2, nombre: "Contador" }, { id: 3, nombre: "Vendedor" }]);
+    try {
+      const res = await fetch("http://localhost:8000/api/usuarios/listar.php");
+      const data = await res.json();
+      if (data.success) setUsuarios(data.usuarios);
+    } catch (err) {
+      console.error("Error cargando usuarios", err);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -111,7 +102,7 @@ export default function Usuarios() {
 
   return (
     <div>
-      {/* Modales de Éxito/Error (Reutilizados) */}
+      {/* Modales de Éxito/Error */}
       {modalExito && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000 }}>
           <div style={{ background: "white", padding: "30px", borderRadius: "12px", textAlign: "center", maxWidth: "400px" }}>
@@ -135,8 +126,6 @@ export default function Usuarios() {
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px" }}>
         <Button onClick={() => setShowModal(true)}>Nuevo Usuario</Button>
       </div>
-
-      
 
       <Card>
         <div style={{ overflowX: "auto" }}>
@@ -177,7 +166,7 @@ export default function Usuarios() {
         </div>
       </Card>
 
-      {/* MODAL CREAR USUARIO */}
+      {/* MODAL CREAR USUARIO (SIN EL SELECT DE ROL) */}
       {showModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 }} onClick={() => setShowModal(false)}>
           <div style={{ background: "white", padding: "32px", borderRadius: "12px", width: "100%", maxWidth: "450px" }} onClick={e => e.stopPropagation()}>
@@ -187,9 +176,7 @@ export default function Usuarios() {
               <input type="email" required placeholder="Correo electrónico *" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} style={{ padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px" }} />
               <input type="password" required placeholder="Contraseña *" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} style={{ padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px" }} />
               
-              <select value={formData.rol_id} onChange={e => setFormData({...formData, rol_id: e.target.value})} style={{ padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px" }}>
-                {roles.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-              </select>
+              {/* El campo <select> de rol fue eliminado de aquí */}
 
               <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
                 <button type="button" onClick={() => setShowModal(false)} style={{ flex: 1, padding: "12px", border: "1px solid #d1d5db", borderRadius: "6px", background: "white", cursor: "pointer" }}>Cancelar</button>

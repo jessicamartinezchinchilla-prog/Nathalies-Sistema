@@ -42,6 +42,26 @@ export default function CuentasPorPagar() {
   const handlePagar = async () => {
     if (!modalPago || !montoPagado) return;
     
+    const saldoPendiente = Number(modalPago.monto_original) - Number(modalPago.monto_pagado);
+    const montoIngresado = parseFloat(montoPagado);
+
+    // 1. Validar que el monto sea mayor a 0
+    if (montoIngresado <= 0) {
+      setModalError("El monto a pagar debe ser mayor a 0");
+      return;
+    }
+
+    // 2. Si se pasa del saldo, advertir sobre el vuelto
+    if (montoIngresado > saldoPendiente) {
+      const vuelto = montoIngresado - saldoPendiente;
+      const confirmar = window.confirm(
+        `⚠️ El monto ingresado ($${montoIngresado.toFixed(2)}) es mayor al saldo pendiente ($${saldoPendiente.toFixed(2)}).\n\n` +
+        `Se generará un vuelto de: $${vuelto.toFixed(2)}\n\n` +
+        `¿Desea continuar con el pago?`
+      );
+      if (!confirmar) return;
+    }
+    
     setLoading(true);
     try {
       const res = await fetch("http://localhost:8000/api/cuentas_por_pagar/marcar_pagada.php", {
@@ -49,18 +69,24 @@ export default function CuentasPorPagar() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: modalPago.id,
-          monto_pagado: parseFloat(montoPagado),
-          metodo_pago: metodoPago
+          monto_pagado: montoIngresado,
+          metodo_pago: metodoPago,
+          saldo_pendiente: saldoPendiente // Enviamos el saldo para que el backend lo valide también
         })
       });
       const data = await res.json();
+      
       if (data.success) {
-        setModalExito(`Cuenta de ${modalPago.proveedor} marcada como pagada`);
+        let mensaje = `Cuenta de ${modalPago.proveedor} marcada como pagada`;
+        if (data.vuelto && data.vuelto > 0) {
+          mensaje += `\n\n💵 Vuelto entregado: $${Number(data.vuelto).toFixed(2)}`;
+        }
+        setModalExito(mensaje);
         setModalPago(null);
         setMontoPagado("");
         cargarCuentas();
       } else {
-        setModalError(data.error);
+        setModalError(data.error || "Error al procesar el pago");
       }
     } catch (err) {
       setModalError("Error de conexión");
@@ -81,12 +107,12 @@ export default function CuentasPorPagar() {
 
   return (
     <div>
-      {/* Modales */}
+      {/* Modales de Éxito y Error */}
       {modalExito && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000 }}>
           <div style={{ background: "white", padding: "30px", borderRadius: "12px", textAlign: "center", maxWidth: "400px" }}>
             <div style={{ fontSize: "50px", marginBottom: "10px" }}>✅</div>
-            <h3>{modalExito}</h3>
+            <h3 style={{ whiteSpace: "pre-line" }}>{modalExito}</h3>
             <Button onClick={() => setModalExito(null)}>Aceptar</Button>
           </div>
         </div>
@@ -95,8 +121,8 @@ export default function CuentasPorPagar() {
       {modalError && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 2000 }}>
           <div style={{ background: "white", padding: "30px", borderRadius: "12px", textAlign: "center", maxWidth: "400px" }}>
-            <div style={{ fontSize: "50px", marginBottom: "10px" }}>️</div>
-            <h3 style={{ color: "#ef4444" }}>Error</h3>
+            <div style={{ fontSize: "50px", marginBottom: "10px" }}>⚠️</div>
+            <h3 style={{ color: "#ef4444", margin: "0 0 10px 0" }}>Error</h3>
             <p>{modalError}</p>
             <Button onClick={() => setModalError(null)} style={{ background: "#ef4444" }}>Cerrar</Button>
           </div>
@@ -180,46 +206,58 @@ export default function CuentasPorPagar() {
       </Card>
 
       {/* MODAL PAGAR */}
-      {modalPago && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 }} onClick={() => setModalPago(null)}>
-          <div style={{ background: "white", padding: "32px", borderRadius: "12px", width: "100%", maxWidth: "450px" }} onClick={e => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, marginBottom: "8px" }}>Registrar Pago</h2>
-            <p style={{ color: "#6b7280", marginBottom: "20px", fontSize: "14px" }}>
-              Proveedor: <strong>{modalPago.proveedor}</strong><br/>
-              Saldo pendiente: <strong style={{ color: "#ef4444" }}>${(Number(modalPago.monto_original) - Number(modalPago.monto_pagado)).toFixed(2)}</strong>
-            </p>
+      {modalPago && (() => {
+        const saldoPendiente = Number(modalPago.monto_original) - Number(modalPago.monto_pagado);
+        const montoIngresado = parseFloat(montoPagado) || 0;
+        const vuelto = montoIngresado > saldoPendiente ? montoIngresado - saldoPendiente : 0;
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              <div>
-                <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: 600 }}>Monto a pagar *</label>
-                <input 
-                  type="number" 
-                  step="0.01" 
-                  value={montoPagado} 
-                  onChange={(e) => setMontoPagado(e.target.value)}
-                  style={{ width: "100%", padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "14px" }}
-                />
-              </div>
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 }} onClick={() => setModalPago(null)}>
+            <div style={{ background: "white", padding: "32px", borderRadius: "12px", width: "100%", maxWidth: "450px" }} onClick={e => e.stopPropagation()}>
+              <h2 style={{ marginTop: 0, marginBottom: "8px" }}>Registrar Pago</h2>
+              <p style={{ color: "#6b7280", marginBottom: "20px", fontSize: "14px" }}>
+                Proveedor: <strong>{modalPago.proveedor}</strong><br/>
+                Saldo pendiente: <strong style={{ color: "#ef4444" }}>${saldoPendiente.toFixed(2)}</strong>
+              </p>
 
-              <div>
-                <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: 600 }}>Método de pago *</label>
-                <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} style={{ width: "100%", padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "14px" }}>
-                  <option value="Efectivo">Efectivo</option>
-                  <option value="Transferencia">Transferencia</option>
-                  <option value="Tarjeta">Tarjeta</option>
-                </select>
-              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div>
+                  <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: 600 }}>Monto a pagar *</label>
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    value={montoPagado} 
+                    onChange={(e) => setMontoPagado(e.target.value)}
+                    style={{ width: "100%", padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "14px", boxSizing: "border-box" }}
+                  />
+                  {/* 🎯 MUESTRA EL VUELTO EN TIEMPO REAL SI SE PASA DEL SALDO */}
+                  {vuelto > 0 && (
+                    <div style={{ marginTop: "8px", padding: "10px", background: "#ecfdf5", borderRadius: "6px", color: "#059669", fontSize: "14px", fontWeight: 600, textAlign: "center" }}>
+                      💵 Vuelto a entregar: ${vuelto.toFixed(2)}
+                    </div>
+                  )}
+                </div>
 
-              <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
-                <button onClick={() => setModalPago(null)} style={{ flex: 1, padding: "12px", border: "1px solid #d1d5db", borderRadius: "6px", background: "white", cursor: "pointer" }}>Cancelar</button>
-                <button onClick={handlePagar} disabled={loading} style={{ flex: 1, padding: "12px", border: "none", borderRadius: "6px", background: "#10b981", color: "white", cursor: "pointer" }}>
-                  {loading ? "Procesando..." : "Confirmar Pago"}
-                </button>
+                <div>
+                  <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: 600 }}>Método de pago *</label>
+                  <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} style={{ width: "100%", padding: "10px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "14px", boxSizing: "border-box" }}>
+                    <option value="Efectivo">Efectivo</option>
+                    <option value="Transferencia">Transferencia</option>
+                    <option value="Tarjeta">Tarjeta</option>
+                  </select>
+                </div>
+
+                <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
+                  <button onClick={() => setModalPago(null)} style={{ flex: 1, padding: "12px", border: "1px solid #d1d5db", borderRadius: "6px", background: "white", cursor: "pointer", fontWeight: 600 }}>Cancelar</button>
+                  <button onClick={handlePagar} disabled={loading} style={{ flex: 1, padding: "12px", border: "none", borderRadius: "6px", background: "#10b981", color: "white", cursor: "pointer", fontWeight: 600 }}>
+                    {loading ? "Procesando..." : "Confirmar Pago"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

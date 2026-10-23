@@ -36,6 +36,13 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   return (
     <div>
       {/* ══════════════════════════════════════════
+          TÍTULO DEL DASHBOARD (Limpio, sin campanita)
+      ══════════════════════════════════════════ */}
+      <h1 style={{ margin: "0 0 24px 0", fontSize: "24px", fontWeight: 700, color: "#1f2937" }}>
+        Dashboard
+      </h1>
+
+      {/* ══════════════════════════════════════════
           FILA 1: 4 TARJETAS DE RESUMEN SUPERIOR
       ══════════════════════════════════════════ */}
       <div style={{ 
@@ -117,7 +124,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         }}>
           <h3 style={{ margin: "0 0 24px 0", fontSize: "18px", fontWeight: 700, color: "#1f2937" }}>Caja del día</h3>
           
-          {/* Tres columnas: Total | Efectivo | Transferencia */}
           <div style={{ 
             display: "grid", 
             gridTemplateColumns: "1fr 1fr 1fr", 
@@ -144,7 +150,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </div>
           </div>
 
-          {/* Barra de progreso */}
           <div style={{ 
             height: "8px", 
             background: "#e5e7eb", 
@@ -234,7 +239,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </div>
             
             <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
-              {data.stock_bajo_list.map((item: any, idx: number) => (
+              {data.stock_bajo_list && data.stock_bajo_list.map((item: any, idx: number) => (
                 <div key={idx} style={{ 
                   display: "flex", 
                   justifyContent: "space-between", 
@@ -246,7 +251,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                   <span style={{ color: "#dc2626", fontWeight: 700 }}>{item.stock}/{item.stock_minimo}</span>
                 </div>
               ))}
-              {data.stock_bajo_count === 0 && (
+              {(!data.stock_bajo_list || data.stock_bajo_count === 0) && (
                 <div style={{ fontSize: "13px", color: "#10b981" }}>✅ Inventario saludable</div>
               )}
             </div>
@@ -297,7 +302,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column" }}>
-          {data.ultimas_ventas.map((v: any, idx: number) => (
+          {data.ultimas_ventas && data.ultimas_ventas.map((v: any, idx: number) => (
             <div key={idx} style={{ 
               display: "flex", 
               justifyContent: "space-between", 
@@ -329,7 +334,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               </div>
             </div>
           ))}
-          {data.ultimas_ventas.length === 0 && (
+          {(!data.ultimas_ventas || data.ultimas_ventas.length === 0) && (
             <div style={{ textAlign: "center", padding: "24px", color: "#6b7280", fontSize: "14px" }}>
               No hay ventas registradas hoy
             </div>
