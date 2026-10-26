@@ -27,8 +27,9 @@ export default function Login({ onLogin }: LoginProps) {
       const data = await response.json();
 
       if (data.success) {
-        // 1. Guardamos los datos del usuario en el navegador
-        localStorage.setItem("user", JSON.stringify(data.usuario));
+        // 1. Guardamos los datos del usuario (incluyendo rol y permisos) en el navegador
+        const userObj = data.usuario || data.user;
+        localStorage.setItem("user", JSON.stringify(userObj));
         
         // 2. Llamamos a la función que nos pasa App.tsx para mostrar el sistema
         onLogin(); 

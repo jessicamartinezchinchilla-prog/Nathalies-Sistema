@@ -1,18 +1,5 @@
 <?php
-
-// Headers de CORS para permitir conexión desde React
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type");
-header("Access-Control-Allow-Credentials: true");
-
-// Manejar preflight request (OPTIONS)
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
-header("Content-Type: application/json; charset=UTF-8");
+require_once '../../config/db.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -29,10 +16,14 @@ if (empty($data['email']) || empty($data['password'])) {
 }
 
 try {
-    require_once '../../config/db.php';
-    
+    // Asegurar que la columna 'permisos' exista en 'roles'
+    $cols = $pdo->query("DESCRIBE roles")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('permisos', $cols)) {
+        $pdo->exec("ALTER TABLE roles ADD COLUMN permisos TEXT NULL AFTER descripcion");
+    }
+
     $stmt = $pdo->prepare("
-        SELECT u.id, u.nombre, u.email, u.password, u.rol_id, u.estado, r.nombre as rol 
+        SELECT u.id, u.nombre, u.email, u.password, u.rol_id, u.estado, r.nombre as rol, r.permisos
         FROM usuarios u
         LEFT JOIN roles r ON u.rol_id = r.id
         WHERE u.email = :email
@@ -52,11 +43,38 @@ try {
         exit();
     }
 
+    $defaultPermisos = [
+        'Administrador' => [
+            'dashboard', 'nueva-venta', 'historial-ventas',
+            'productos', 'insumos', 'servicios',
+            'compras', 'proveedores', 'cuentas-pagar',
+            'gastos', 'contabilidad', 'reportes',
+            'usuarios', 'configuracion'
+        ],
+        'Contador' => [
+            'dashboard', 'historial-ventas',
+            'compras', 'proveedores', 'cuentas-pagar',
+            'gastos', 'contabilidad', 'reportes'
+        ],
+        'Cajero' => [
+            'nueva-venta', 'historial-ventas',
+            'productos', 'insumos', 'servicios'
+        ]
+    ];
+
+    if (!empty($user['permisos'])) {
+        $decoded = json_decode($user['permisos'], true);
+        $user['permisos'] = is_array($decoded) ? $decoded : ($defaultPermisos[$user['rol']] ?? []);
+    } else {
+        $user['permisos'] = $defaultPermisos[$user['rol']] ?? ['nueva-venta', 'historial-ventas'];
+    }
+
     unset($user['password']);
-    
+
     echo json_encode([
         "success" => true,
         "user" => $user,
+        "usuario" => $user,
         "message" => "Bienvenido, " . $user['nombre']
     ]);
     exit();

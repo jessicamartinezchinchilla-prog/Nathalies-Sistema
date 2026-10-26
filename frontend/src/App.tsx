@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Login from "./pages/Login";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
@@ -16,10 +16,18 @@ import Contabilidad from "./pages/Contabilidad";
 import Usuarios from "./pages/Usuarios";
 import Reportes from "./pages/Reportes";
 import Configuracion from "./pages/Configuracion";
+import {
+  getUsuarioActual,
+  tienePermisoModulo,
+  getPaginaInicialPorRol,
+} from "./utils/roles";
 
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentPage, setCurrentPage] = useState("dashboard");
+  const [usuario, setUsuario] = useState<any>(() => getUsuarioActual());
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => !!getUsuarioActual());
+  const [currentPage, setCurrentPage] = useState<string>(() =>
+    getPaginaInicialPorRol(getUsuarioActual())
+  );
 
   const [showOpenCashModal, setShowOpenCashModal] = useState(false);
   const [montoApertura, setMontoApertura] = useState("");
@@ -29,10 +37,37 @@ export default function App() {
   const [loadingCaja, setLoadingCaja] = useState(false);
   const [ventasTurno, setVentasTurno] = useState(0);
 
+  useEffect(() => {
+    const syncUser = () => {
+      const u = getUsuarioActual();
+      setUsuario(u);
+      if (u && !tienePermisoModulo(u, currentPage)) {
+        setCurrentPage(getPaginaInicialPorRol(u));
+      }
+    };
+    window.addEventListener("roles-updated", syncUser);
+    return () => window.removeEventListener("roles-updated", syncUser);
+  }, [currentPage]);
+
+  const handleLoginSuccess = () => {
+    const u = getUsuarioActual();
+    setUsuario(u);
+    const paginaInicial = getPaginaInicialPorRol(u);
+    setCurrentPage(paginaInicial);
+
+    // Si el rol tiene permiso de Nueva Venta (ej. Administrador o Cajero), pedir apertura de caja
+    if (tienePermisoModulo(u, "nueva-venta")) {
+      setShowOpenCashModal(true);
+    } else {
+      // Ej. Contador: ingresa directo sin manejo de efectivo en caja
+      setIsLoggedIn(true);
+    }
+  };
+
   if (!isLoggedIn && !showOpenCashModal) {
     return (
       <div style={{ width: "100vw", height: "100vh", overflow: "hidden" }}>
-        <Login onLogin={() => setShowOpenCashModal(true)} />
+        <Login onLogin={handleLoginSuccess} />
       </div>
     );
   }
@@ -77,21 +112,31 @@ export default function App() {
     );
   }
 
-  // ✅ FUNCIÓN CORREGIDA CON LA URL EXACTA Y LOGS DE DIAGNÓSTICO
+  const cerrarSesionDirecto = () => {
+    localStorage.removeItem("caja_inicial");
+    localStorage.removeItem("fecha_apertura");
+    localStorage.removeItem("user");
+    setUsuario(null);
+    setIsLoggedIn(false);
+    setShowCloseCashModal(false);
+    setMontoCierreReal("");
+  };
+
   const solicitarCierre = async () => {
+    const u = getUsuarioActual();
+    // Si el rol no maneja caja (ej. Contador), cerrar sesión directamente
+    if (!tienePermisoModulo(u, "nueva-venta")) {
+      cerrarSesionDirecto();
+      return;
+    }
+
     setLoadingCaja(true);
     try {
-      const fechaApertura = localStorage.getItem("fecha_apertura") || new Date().toISOString().split('T')[0];
-      const hoy = new Date().toISOString().split('T')[0];
+      const fechaApertura = localStorage.getItem("fecha_apertura") || new Date().toISOString().split("T")[0];
+      const hoy = new Date().toISOString().split("T")[0];
 
-      console.log("🔍 Buscando ventas en el backend...");
-      console.log("Fechas enviadas:", { fecha_inicio: fechaApertura, fecha_fin: hoy });
-
-      // ⚠️ AQUÍ ESTABA EL ERROR: Ahora apunta a 'cierres/resumen.php'
       const res = await fetch(`http://localhost:8000/api/cierres/resumen.php?fecha_inicio=${fechaApertura}&fecha_fin=${hoy}`);
       const data = await res.json();
-
-      console.log("📊 Respuesta del servidor:", data);
 
       setVentasTurno(data.success ? (data.total_ventas || 0) : 0);
       setShowCloseCashModal(true);
@@ -115,6 +160,7 @@ export default function App() {
       const cajaInicial = parseFloat(localStorage.getItem("caja_inicial") || "0");
       const totalEsperado = cajaInicial + ventasTurno;
       const diferencia = parseFloat(montoCierreReal) - totalEsperado;
+      const u = getUsuarioActual();
 
       await fetch("http://localhost:8000/api/cierres/guardar.php", {
         method: "POST",
@@ -125,16 +171,11 @@ export default function App() {
           monto_real: parseFloat(montoCierreReal),
           diferencia: diferencia,
           fecha_apertura: localStorage.getItem("fecha_apertura"),
-          usuario_id: 1
-        })
+          usuario_id: u?.id || 1,
+        }),
       });
 
-      localStorage.removeItem("caja_inicial");
-      localStorage.removeItem("fecha_apertura");
-      localStorage.removeItem("user");
-      setIsLoggedIn(false);
-      setShowCloseCashModal(false);
-      setMontoCierreReal("");
+      cerrarSesionDirecto();
     } catch (err) {
       alert("Error al registrar el cierre de caja");
     } finally {
@@ -142,38 +183,74 @@ export default function App() {
     }
   };
 
-  const handleNavigate = (page: string) => setCurrentPage(page);
+  const handleNavigate = (page: string) => {
+    const u = getUsuarioActual();
+    if (!tienePermisoModulo(u, page)) {
+      return;
+    }
+    setCurrentPage(page);
+  };
 
   const getPageTitle = () => {
     const titles: Record<string, string> = {
-      dashboard: "Dashboard", productos: "Productos", insumos: "Insumos", servicios: "Servicios",
-      "nueva-venta": "Nueva Venta", "historial-ventas": "Historial de Ventas", compras: "Compras",
-      proveedores: "Proveedores", "cuentas-pagar": "Cuentas por Pagar", gastos: "Gastos",
-      contabilidad: "Contabilidad", usuarios: "Usuarios", reportes: "Reportes", configuracion: "Configuración General",
+      dashboard: "Dashboard",
+      productos: "Productos",
+      insumos: "Insumos",
+      servicios: "Servicios",
+      "nueva-venta": "Nueva Venta",
+      "historial-ventas": "Historial de Ventas",
+      compras: "Compras",
+      proveedores: "Proveedores",
+      "cuentas-pagar": "Cuentas por Pagar",
+      gastos: "Gastos",
+      contabilidad: "Contabilidad",
+      usuarios: "Usuarios y Configuración de Roles",
+      reportes: "Reportes",
+      configuracion: "Configuración General",
     };
     return titles[currentPage] || "Sistema";
   };
+
+  const tieneAccesoActual = tienePermisoModulo(usuario, currentPage);
 
   return (
     <div style={{ display: "flex", height: "100vh", background: "var(--background, #f9fafb)", overflow: "hidden" }}>
       <Sidebar current={currentPage} onNavigate={handleNavigate} onLogout={solicitarCierre} />
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <Header title={getPageTitle()} subtitle="Gestión del sistema" />
+        <Header title={getPageTitle()} subtitle={`Sesión activa: ${usuario?.nombre || "Usuario"} (${usuario?.rol || "Rol"})`} />
         <main style={{ flex: 1, overflowY: "auto", padding: "32px" }}>
-          {currentPage === "dashboard" && <Dashboard onNavigate={handleNavigate} />}
-          {currentPage === "productos" && <Productos />}
-          {currentPage === "insumos" && <Insumos />}
-          {currentPage === "servicios" && <Servicios />}
-          {currentPage === "nueva-venta" && <NuevaVenta />}
-          {currentPage === "historial-ventas" && <HistorialVentas />}
-          {currentPage === "compras" && <Compras />}
-          {currentPage === "proveedores" && <Proveedores />}
-          {currentPage === "cuentas-pagar" && <CuentasPorPagar />}
-          {currentPage === "gastos" && <Gastos />}
-          {currentPage === "contabilidad" && <Contabilidad />}
-          {currentPage === "usuarios" && <Usuarios />}
-          {currentPage === "reportes" && <Reportes />}
-          {currentPage === "configuracion" && <Configuracion />}
+          {!tieneAccesoActual ? (
+            <div style={{ background: "white", padding: "48px", borderRadius: "12px", textAlign: "center", maxWidth: "520px", margin: "40px auto", border: "1px solid #e5e7eb" }}>
+              <div style={{ fontSize: "48px", marginBottom: "16px" }}>🔒</div>
+              <h2 style={{ margin: "0 0 8px", color: "#1f2937" }}>Acceso Restringido</h2>
+              <p style={{ color: "#6b7280", marginBottom: "24px", fontSize: "14px", lineHeight: 1.6 }}>
+                Tu rol actual (<strong>{usuario?.rol || "Usuario"}</strong>) no tiene permisos habilitados para acceder a este apartado.
+              </p>
+              <button
+                onClick={() => setCurrentPage(getPaginaInicialPorRol(usuario))}
+                style={{ padding: "10px 20px", background: "#c08497", color: "white", border: "none", borderRadius: "8px", fontWeight: 600, cursor: "pointer" }}
+              >
+                Ir a mi módulo principal
+              </button>
+            </div>
+          ) : (
+            <>
+              {currentPage === "dashboard" && <Dashboard onNavigate={handleNavigate} />}
+              {currentPage === "productos" && <Productos />}
+              {currentPage === "insumos" && <Insumos />}
+              {currentPage === "servicios" && <Servicios />}
+              {currentPage === "nueva-venta" && <NuevaVenta />}
+              {currentPage === "historial-ventas" && <HistorialVentas />}
+              {currentPage === "compras" && <Compras />}
+              {currentPage === "proveedores" && <Proveedores />}
+              {currentPage === "cuentas-pagar" && <CuentasPorPagar />}
+              {currentPage === "gastos" && <Gastos />}
+              {currentPage === "contabilidad" && <Contabilidad />}
+              {currentPage === "usuarios" && <Usuarios />}
+              {currentPage === "reportes" && <Reportes />}
+              {currentPage === "configuracion" && <Configuracion />}
+            </>
+          )}
         </main>
       </div>
 
@@ -181,7 +258,7 @@ export default function App() {
         const cajaInicial = parseFloat(localStorage.getItem("caja_inicial") || "0");
         const totalEsperado = cajaInicial + ventasTurno;
         const diferencia = parseFloat(montoCierreReal || "0") - totalEsperado;
-        const fmt = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'USD' }).format(n);
+        const fmt = (n: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "USD" }).format(n);
 
         return (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 3000 }}>

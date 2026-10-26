@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getUsuarioActual, tienePermisoModulo } from "../utils/roles";
 
 interface SidebarProps {
   current: string;
@@ -7,33 +8,61 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ current, onNavigate, onLogout }: SidebarProps) {
-  const [usuario, setUsuario] = useState<any>(null);
+  const [usuario, setUsuario] = useState<any>(() => getUsuarioActual());
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({
     ventas: true,
     inventario: true,
     configuracion: false,
   });
 
-  useEffect(() => {
+  const cargarPermisosActualizados = async () => {
+    const userLocal = getUsuarioActual();
+    if (!userLocal) {
+      setUsuario(null);
+      return;
+    }
+    setUsuario(userLocal);
+
     try {
-      const userStr = localStorage.getItem("user");
-      if (userStr && userStr !== "undefined" && userStr !== "null") {
-        setUsuario(JSON.parse(userStr));
-      } else {
-        localStorage.removeItem("user");
+      const res = await fetch("http://localhost:8000/api/roles/listar.php");
+      const data = await res.json();
+      if (data.success && Array.isArray(data.roles)) {
+        const miRol = data.roles.find(
+          (r: any) =>
+            Number(r.id) === Number(userLocal.rol_id) ||
+            r.nombre === userLocal.rol
+        );
+        if (miRol && Array.isArray(miRol.permisos)) {
+          const actualizado = {
+            ...userLocal,
+            rol: miRol.nombre,
+            permisos: miRol.permisos,
+          };
+          localStorage.setItem("user", JSON.stringify(actualizado));
+          setUsuario(actualizado);
+        }
       }
     } catch (error) {
-      console.error("Error al leer usuario:", error);
-      localStorage.removeItem("user");
+      // Si falla la petición usamos los permisos guardados en localStorage
     }
+  };
+
+  useEffect(() => {
+    cargarPermisosActualizados();
+
+    const handleRolesUpdated = () => {
+      cargarPermisosActualizados();
+    };
+    window.addEventListener("roles-updated", handleRolesUpdated);
+    return () => window.removeEventListener("roles-updated", handleRolesUpdated);
   }, []);
 
   const toggleMenu = (menu: string) => {
     setOpenMenus((prev) => ({ ...prev, [menu]: !prev[menu] }));
   };
 
-  const menuItems = [
-    { id: "dashboard", label: "Dashboard", icon: "" },
+  const rawMenuItems = [
+    { id: "dashboard", label: "Dashboard", icon: "-" },
     {
       id: "ventas",
       label: "Ventas",
@@ -53,21 +82,47 @@ export default function Sidebar({ current, onNavigate, onLogout }: SidebarProps)
         { id: "servicios", label: "Servicios" },
       ],
     },
-    { id: "compras", label: "Compras", icon:"-"},
-    { id: "proveedores", label: "Proveedores", icon: "-"},
-    { id: "cuentas-pagar", label: "Cuentas por pagar", icon: "-"},
-    { id: "gastos", label: "Gastos", icon: "-"},
-    { id: "contabilidad", label: "Contabilidad", icon: "-"},
-    { id: "reportes", label: "Reportes", icon: "-"},
+    { id: "compras", label: "Compras", icon: "-" },
+    { id: "proveedores", label: "Proveedores", icon: "-" },
+    { id: "cuentas-pagar", label: "Cuentas por pagar", icon: "-" },
+    { id: "gastos", label: "Gastos", icon: "-" },
+    { id: "contabilidad", label: "Contabilidad", icon: "-" },
+    { id: "reportes", label: "Reportes", icon: "-" },
     {
-      id: "configuracion",
+      id: "configuracion-menu",
       label: "Configuración",
       icon: "-",
-      children: [{ id: "usuarios", label: "Usuarios" }],
+      children: [
+        { id: "usuarios", label: "Usuarios y Roles" },
+        { id: "configuracion", label: "Configuración General" },
+      ],
     },
   ];
 
+  // Filtrar los módulos del menú según los permisos del rol del usuario activo
+  const menuItems = rawMenuItems
+    .map((item) => {
+      if (item.children) {
+        const allowedChildren = item.children.filter((child) =>
+          tienePermisoModulo(usuario, child.id)
+        );
+        if (allowedChildren.length === 0) return null;
+        return { ...item, children: allowedChildren };
+      }
+      return tienePermisoModulo(usuario, item.id) ? item : null;
+    })
+    .filter(Boolean);
+
   const isActive = (id: string) => current === id;
+
+  const getRolBadgeColor = (rol?: string) => {
+    if (rol === "Administrador") return { bg: "rgba(192, 132, 151, 0.25)", color: "#f4bbc9", border: "rgba(192, 132, 151, 0.5)" };
+    if (rol === "Contador") return { bg: "rgba(59, 130, 246, 0.2)", color: "#93c5fd", border: "rgba(59, 130, 246, 0.4)" };
+    return { bg: "rgba(16, 185, 129, 0.2)", color: "#6ee7b7", border: "rgba(16, 185, 129, 0.4)" };
+  };
+
+  const rolNombre = usuario?.rol || (usuario?.rol_id === 1 ? "Administrador" : usuario?.rol_id === 2 ? "Contador" : "Cajero");
+  const badgeStyle = getRolBadgeColor(rolNombre);
 
   return (
     <div
@@ -117,11 +172,11 @@ export default function Sidebar({ current, onNavigate, onLogout }: SidebarProps)
         </div>
       </div>
 
-      {/* MENÚ DE NAVEGACIÓN */}
+      {/* MENÚ DE NAVEGACIÓN FILTRADO POR ROL */}
       <nav style={{ flex: 1, overflowY: "auto", padding: "16px 0" }}>
         {menuItems.map((item: any) => {
           const hasChildren = item.children && item.children.length > 0;
-          const isOpen = openMenus[item.id];
+          const isOpen = openMenus[item.id] ?? true;
 
           if (hasChildren) {
             return (
@@ -220,7 +275,7 @@ export default function Sidebar({ current, onNavigate, onLogout }: SidebarProps)
         })}
       </nav>
 
-      {/* USUARIO Y CERRAR SESIÓN (Al final, como en tu diseño original) */}
+      {/* USUARIO, ROL Y CERRAR SESIÓN */}
       <div
         style={{
           padding: "16px 24px",
@@ -249,9 +304,10 @@ export default function Sidebar({ current, onNavigate, onLogout }: SidebarProps)
               justifyContent: "center",
               fontSize: "14px",
               fontWeight: 600,
+              flexShrink: 0,
             }}
           >
-            {usuario?.nombre ? usuario.nombre.charAt(0).toUpperCase() : "A"}
+            {usuario?.nombre ? usuario.nombre.charAt(0).toUpperCase() : "U"}
           </div>
           <div style={{ flex: 1, overflow: "hidden" }}>
             <div
@@ -264,15 +320,40 @@ export default function Sidebar({ current, onNavigate, onLogout }: SidebarProps)
                 textOverflow: "ellipsis",
               }}
             >
-              {usuario?.nombre || "Administrador"}
+              {usuario?.nombre || "Usuario"}
             </div>
-            <div style={{ fontSize: "11px", color: "#a78bfa" }}>
-              {usuario?.email || "admin@nathalies.com"}
+            <div style={{ marginTop: "3px", marginBottom: "2px" }}>
+              <span
+                style={{
+                  display: "inline-block",
+                  padding: "2px 8px",
+                  borderRadius: "999px",
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  background: badgeStyle.bg,
+                  color: badgeStyle.color,
+                  border: `1px solid ${badgeStyle.border}`,
+                  letterSpacing: "0.3px",
+                }}
+              >
+                {rolNombre}
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: "11px",
+                color: "#a78bfa",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {usuario?.email || ""}
             </div>
           </div>
         </div>
 
-        {/* Botón Cerrar Sesión con ícono de puertita */}
+        {/* Botón Cerrar Sesión */}
         <button
           onClick={onLogout}
           style={{
