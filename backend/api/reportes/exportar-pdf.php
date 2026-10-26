@@ -53,11 +53,16 @@ if ($total_ventas_tabla > ($venta_productos + $ingreso_servicios)) {
 }
 $total_ingresos = $venta_productos + $ingreso_servicios;
 
-$stmtCosto = $pdo->prepare("SELECT COALESCE(SUM(total), 0) as total, COUNT(*) as cant FROM compras WHERE DATE(fecha) BETWEEN :inicio AND :fin");
+// Costo real de los productos vendidos en el período
+$stmtCosto = $pdo->prepare("
+    SELECT COALESCE(SUM(dv.cantidad * COALESCE(p.costo, 0)), 0) as costo_vendidos
+    FROM detalle_ventas dv
+    INNER JOIN ventas v ON dv.venta_id = v.id
+    LEFT JOIN productos p ON dv.item_id = p.id AND dv.tipo = 'producto'
+    WHERE v.estado = 'Completada' AND DATE(v.fecha) BETWEEN :inicio AND :fin AND dv.tipo = 'producto'
+");
 $stmtCosto->execute([':inicio' => $fecha_inicio, ':fin' => $fecha_fin]);
-$rowC = $stmtCosto->fetch();
-$costo_ventas = floatval($rowC['total']);
-$cant_compras = intval($rowC['cant']);
+$costo_ventas = floatval($stmtCosto->fetch()['costo_vendidos']);
 
 $utilidad_bruta = $total_ingresos - $costo_ventas;
 
@@ -303,7 +308,7 @@ function fmt($n) {
         <div class="val" style="color: #059669;"><?php echo fmt($total_ingresos); ?></div>
       </div>
       <div class="kpi-card">
-        <div class="label">Costo de Compras</div>
+        <div class="label">Costo de Ventas</div>
         <div class="val" style="color: #d97706;"><?php echo fmt($costo_ventas); ?></div>
       </div>
       <div class="kpi-card">
@@ -343,9 +348,9 @@ function fmt($n) {
           <td class="text-right" style="color: #059669;"><?php echo fmt($total_ingresos); ?></td>
         </tr>
         <tr>
-          <td>Costo de mercadería e insumos adquiridos (<?php echo $cant_compras; ?> compras)</td>
+          <td>Costo de productos vendidos</td>
           <td>Costo de Ventas</td>
-          <td class="text-right">- <?php echo fmt($costo_ventas); ?></td>
+          <td class="text-right"><?php echo fmt($costo_ventas); ?></td>
         </tr>
         <tr class="row-subtotal">
           <td colspan="2">UTILIDAD BRUTA OPERATIVA</td>
@@ -354,23 +359,23 @@ function fmt($n) {
         <tr>
           <td>Gasto de alquiler / arrendamiento de local</td>
           <td>Gasto Operativo</td>
-          <td class="text-right">- <?php echo fmt($alquiler); ?></td>
+          <td class="text-right"><?php echo fmt($alquiler); ?></td>
         </tr>
         <tr>
           <td>Servicios básicos (Agua, Energía eléctrica, Internet)</td>
           <td>Gasto Operativo</td>
-          <td class="text-right">- <?php echo fmt($servicios_basicos); ?></td>
+          <td class="text-right"><?php echo fmt($servicios_basicos); ?></td>
         </tr>
         <?php if ($otros_gastos > 0): ?>
         <tr>
           <td>Otros gastos operativos (Mantenimiento, Marketing, Otros)</td>
           <td>Gasto Operativo</td>
-          <td class="text-right">- <?php echo fmt($otros_gastos); ?></td>
+          <td class="text-right"><?php echo fmt($otros_gastos); ?></td>
         </tr>
         <?php endif; ?>
         <tr class="row-subtotal">
           <td colspan="2">TOTAL GASTOS OPERATIVOS</td>
-          <td class="text-right" style="color: #dc2626;">- <?php echo fmt($total_gastos); ?></td>
+          <td class="text-right" style="color: #dc2626;"><?php echo fmt($total_gastos); ?></td>
         </tr>
         <tr class="row-total">
           <td colspan="2">UTILIDAD NETA DEL EJERCICIO</td>
@@ -541,7 +546,6 @@ function fmt($n) {
 </div>
 
 <script>
-  // Abrir automáticamente el diálogo de impresión / Guardar como PDF al cargar
   window.addEventListener('load', function() {
     setTimeout(function() {
       window.print();

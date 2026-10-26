@@ -30,6 +30,7 @@ export default function Reportes() {
     ingreso_servicios: 0,
     total_ingresos: 0,
     costo_ventas: 0,
+    total_compras: 0,
     utilidad_bruta: 0,
     alquiler: 0,
     servicios_basicos: 0,
@@ -74,6 +75,7 @@ export default function Reportes() {
             ingreso_servicios: Number(data.totales.ingreso_servicios || 0),
             total_ingresos: Number(data.totales.ingresos || 0),
             costo_ventas: Number(data.totales.costo_ventas || 0),
+            total_compras: Number(data.totales.total_compras || 0),
             utilidad_bruta: Number(data.totales.utilidad_bruta || 0),
             alquiler: Number(data.totales.alquiler || 0),
             servicios_basicos: Number(data.totales.servicios_basicos || 0),
@@ -146,9 +148,9 @@ export default function Reportes() {
               <td style="padding:10px; border:1px solid #a7f3d0; text-align:right; color:#065f46;">${formatMoney(datos.total_ingresos)}</td>
             </tr>
             <tr>
-              <td colspan="2" style="padding:8px; border:1px solid #e5e7eb;">Costo de productos e insumos comprados (${datos.cantidad_compras} compras)</td>
+              <td colspan="2" style="padding:8px; border:1px solid #e5e7eb;">Costo de productos vendidos</td>
               <td style="padding:8px; border:1px solid #e5e7eb;">Costo de Ventas</td>
-              <td style="padding:8px; border:1px solid #e5e7eb; text-align:right;">- ${formatMoney(datos.costo_ventas)}</td>
+              <td style="padding:8px; border:1px solid #e5e7eb; text-align:right;">${formatMoney(datos.costo_ventas)}</td>
             </tr>
             <tr style="background:#f3f4f6; font-weight:bold;">
               <td colspan="3" style="padding:10px; border:1px solid #d1d5db;">UTILIDAD BRUTA</td>
@@ -157,22 +159,22 @@ export default function Reportes() {
             <tr>
               <td colspan="2" style="padding:8px; border:1px solid #e5e7eb;">Alquiler de local</td>
               <td style="padding:8px; border:1px solid #e5e7eb;">Gastos Operativos</td>
-              <td style="padding:8px; border:1px solid #e5e7eb; text-align:right;">- ${formatMoney(datos.alquiler)}</td>
+              <td style="padding:8px; border:1px solid #e5e7eb; text-align:right;">${formatMoney(datos.alquiler)}</td>
             </tr>
             <tr>
               <td colspan="2" style="padding:8px; border:1px solid #e5e7eb;">Servicios básicos (Agua, Luz, Internet)</td>
               <td style="padding:8px; border:1px solid #e5e7eb;">Gastos Operativos</td>
-              <td style="padding:8px; border:1px solid #e5e7eb; text-align:right;">- ${formatMoney(datos.servicios_basicos)}</td>
+              <td style="padding:8px; border:1px solid #e5e7eb; text-align:right;">${formatMoney(datos.servicios_basicos)}</td>
             </tr>
             ${datos.otros_gastos > 0 ? `
             <tr>
               <td colspan="2" style="padding:8px; border:1px solid #e5e7eb;">Otros gastos operativos</td>
               <td style="padding:8px; border:1px solid #e5e7eb;">Gastos Operativos</td>
-              <td style="padding:8px; border:1px solid #e5e7eb; text-align:right;">- ${formatMoney(datos.otros_gastos)}</td>
+              <td style="padding:8px; border:1px solid #e5e7eb; text-align:right;">${formatMoney(datos.otros_gastos)}</td>
             </tr>` : ""}
             <tr style="background:#fef2f2; font-weight:bold;">
               <td colspan="3" style="padding:10px; border:1px solid #fecaca; color:#991b1b;">TOTAL GASTOS OPERATIVOS</td>
-              <td style="padding:10px; border:1px solid #fecaca; text-align:right; color:#991b1b;">- ${formatMoney(datos.total_gastos)}</td>
+              <td style="padding:10px; border:1px solid #fecaca; text-align:right; color:#991b1b;">${formatMoney(datos.total_gastos)}</td>
             </tr>
             <tr style="background:#fdf2f8; font-weight:bold; font-size:14px;">
               <td colspan="3" style="padding:12px; border:2px solid #c08497; color:#190C30;">UTILIDAD NETA DEL PERÍODO</td>
@@ -250,7 +252,7 @@ export default function Reportes() {
             ${filas}
             <tr style="background:#fdf2f8; font-weight:bold;">
               <td colspan="5" style="padding:10px; border:2px solid #c08497;">TOTAL COMPRAS DEL PERÍODO</td>
-              <td style="padding:10px; border:2px solid #c08497; text-align:right;">${formatMoney(datos.costo_ventas)}</td>
+              <td style="padding:10px; border:2px solid #c08497; text-align:right;">${formatMoney(datos.total_compras)}</td>
             </tr>
           </tbody>
         </table>
@@ -550,9 +552,9 @@ export default function Reportes() {
           <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>{datos.cantidad_ventas} ventas completadas</div>
         </div>
         <div style={{ background: "white", padding: "18px 20px", borderRadius: "12px", border: "1px solid #e5e7eb" }}>
-          <div style={{ fontSize: "12px", color: "#6b7280", fontWeight: 600, textTransform: "uppercase" }}>Costo de Compras</div>
+          <div style={{ fontSize: "12px", color: "#6b7280", fontWeight: 600, textTransform: "uppercase" }}>Costo de Ventas</div>
           <div style={{ fontSize: "24px", fontWeight: 800, color: "#f59e0b", marginTop: "6px" }}>{formatMoney(datos.costo_ventas)}</div>
-          <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>{datos.cantidad_compras} compras registradas</div>
+          <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>Costo de productos vendidos</div>
         </div>
         <div style={{ background: "white", padding: "18px 20px", borderRadius: "12px", border: "1px solid #e5e7eb" }}>
           <div style={{ fontSize: "12px", color: "#6b7280", fontWeight: 600, textTransform: "uppercase" }}>Gastos Operativos</div>
@@ -642,11 +644,11 @@ export default function Reportes() {
                   {/* Costos */}
                   <div style={{ marginBottom: "24px" }}>
                     <div style={{ fontSize: "11px", fontWeight: "bold", color: "#d97706", letterSpacing: "1px", marginBottom: "10px" }}>
-                      2. COSTO DE VENTAS Y COMPRAS
+                      2. COSTO DE VENTAS
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0 8px 16px", fontSize: "14px" }}>
-                      <span>Costo de productos e insumos comprados ({datos.cantidad_compras} compras)</span>
-                      <span style={{ fontWeight: 600 }}>- {formatMoney(datos.costo_ventas)}</span>
+                      <span>Costo de productos vendidos</span>
+                      <span style={{ fontWeight: 600 }}>{formatMoney(datos.costo_ventas)}</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", marginTop: "8px", background: "#f3f4f6", borderRadius: "8px", fontWeight: 700 }}>
                       <span>Utilidad Bruta Operativa</span>
@@ -661,21 +663,21 @@ export default function Reportes() {
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0 8px 16px", fontSize: "14px", borderBottom: "1px dashed #e5e7eb" }}>
                       <span>Alquiler / Arrendamiento de local</span>
-                      <span style={{ fontWeight: 600 }}>- {formatMoney(datos.alquiler)}</span>
+                      <span style={{ fontWeight: 600 }}>{formatMoney(datos.alquiler)}</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0 8px 16px", fontSize: "14px" }}>
                       <span>Servicios básicos (Agua, Luz, Internet)</span>
-                      <span style={{ fontWeight: 600 }}>- {formatMoney(datos.servicios_basicos)}</span>
+                      <span style={{ fontWeight: 600 }}>{formatMoney(datos.servicios_basicos)}</span>
                     </div>
                     {datos.otros_gastos > 0 && (
                       <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0 8px 16px", fontSize: "14px", borderTop: "1px dashed #e5e7eb" }}>
                         <span>Otros gastos operativos</span>
-                        <span style={{ fontWeight: 600 }}>- {formatMoney(datos.otros_gastos)}</span>
+                        <span style={{ fontWeight: 600 }}>{formatMoney(datos.otros_gastos)}</span>
                       </div>
                     )}
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", marginTop: "8px", background: "#fef2f2", borderRadius: "8px", fontWeight: 700, color: "#991b1b" }}>
                       <span>Total Gastos Operativos</span>
-                      <span>- {formatMoney(datos.total_gastos)}</span>
+                      <span>{formatMoney(datos.total_gastos)}</span>
                     </div>
                   </div>
 
@@ -696,7 +698,7 @@ export default function Reportes() {
                         UTILIDAD NETA DEL PERÍODO
                       </div>
                       <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>
-                        Resultado final después de costos de compras y gastos ({fechasActivas.label})
+                        Resultado final después de costo de ventas y gastos ({fechasActivas.label})
                       </div>
                     </div>
                     <div

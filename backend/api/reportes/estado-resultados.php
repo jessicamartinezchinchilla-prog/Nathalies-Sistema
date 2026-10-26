@@ -29,7 +29,7 @@ try {
     $stmtServ->execute([':inicio' => $fecha_inicio, ':fin' => $fecha_fin]);
     $ingreso_servicios = floatval($stmtServ->fetch()['total']);
 
-    // Verificar total general de ventas completadas por si alguna venta no tuvo desglose en detalle_ventas
+    // Verificar total general de ventas completadas
     $stmtTotalVentas = $pdo->prepare("
         SELECT COALESCE(SUM(total), 0) as total, COUNT(*) as cantidad
         FROM ventas
@@ -47,15 +47,28 @@ try {
     }
     $total_ingresos = $venta_productos + $ingreso_servicios;
 
-    // 3. Costo de ventas (compras del período)
-    $stmtCosto = $pdo->prepare("
+    // 3. Costo de ventas real (costo unitario de los productos vendidos en el período)
+    $stmtCostoVendidos = $pdo->prepare("
+        SELECT COALESCE(SUM(dv.cantidad * COALESCE(p.costo, 0)), 0) as costo_vendidos
+        FROM detalle_ventas dv
+        INNER JOIN ventas v ON dv.venta_id = v.id
+        LEFT JOIN productos p ON dv.item_id = p.id AND dv.tipo = 'producto'
+        WHERE v.estado = 'Completada'
+          AND DATE(v.fecha) BETWEEN :inicio AND :fin
+          AND dv.tipo = 'producto'
+    ");
+    $stmtCostoVendidos->execute([':inicio' => $fecha_inicio, ':fin' => $fecha_fin]);
+    $costo_ventas = floatval($stmtCostoVendidos->fetch()['costo_vendidos']);
+
+    // Total de compras a proveedores (para la pestaña de Compras)
+    $stmtCompras = $pdo->prepare("
         SELECT COALESCE(SUM(total), 0) as total, COUNT(*) as cantidad
         FROM compras
         WHERE DATE(fecha) BETWEEN :inicio AND :fin
     ");
-    $stmtCosto->execute([':inicio' => $fecha_inicio, ':fin' => $fecha_fin]);
-    $rowCompras = $stmtCosto->fetch();
-    $costo_ventas = floatval($rowCompras['total']);
+    $stmtCompras->execute([':inicio' => $fecha_inicio, ':fin' => $fecha_fin]);
+    $rowCompras = $stmtCompras->fetch();
+    $total_compras = floatval($rowCompras['total']);
     $cantidad_compras = intval($rowCompras['cantidad']);
 
     $utilidad_bruta = $total_ingresos - $costo_ventas;
@@ -165,6 +178,7 @@ try {
             "ingreso_servicios" => $ingreso_servicios,
             "ingresos" => $total_ingresos,
             "costo_ventas" => $costo_ventas,
+            "total_compras" => $total_compras,
             "utilidad_bruta" => $utilidad_bruta,
             "alquiler" => $alquiler,
             "servicios_basicos" => $servicios_basicos,
