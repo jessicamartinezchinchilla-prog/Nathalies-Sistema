@@ -55,11 +55,12 @@ export default function App() {
     const paginaInicial = getPaginaInicialPorRol(u);
     setCurrentPage(paginaInicial);
 
-    // Si el rol tiene permiso de Nueva Venta (ej. Administrador o Cajero), pedir apertura de caja
+    // Si el rol tiene permiso de Nueva Venta (Administrador o Cajero), mostrar Apertura de Caja
     if (tienePermisoModulo(u, "nueva-venta")) {
       setShowOpenCashModal(true);
     } else {
       // Ej. Contador: ingresa directo sin manejo de efectivo en caja
+      localStorage.setItem("caja_activa", "false");
       setIsLoggedIn(true);
     }
   };
@@ -73,6 +74,9 @@ export default function App() {
   }
 
   if (showOpenCashModal) {
+    const esAdmin =
+      usuario?.rol === "Administrador" || Number(usuario?.rol_id) === 1;
+
     const handleOpenCash = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!montoApertura || parseFloat(montoApertura) < 0) {
@@ -81,6 +85,7 @@ export default function App() {
       }
       setLoadingCaja(true);
       try {
+        localStorage.setItem("caja_activa", "true");
         localStorage.setItem("caja_inicial", montoApertura);
         localStorage.setItem("fecha_apertura", new Date().toISOString());
         setIsLoggedIn(true);
@@ -93,19 +98,50 @@ export default function App() {
       }
     };
 
+    const handleSkipCashAdmin = () => {
+      localStorage.setItem("caja_activa", "false");
+      localStorage.removeItem("caja_inicial");
+      localStorage.removeItem("fecha_apertura");
+      setIsLoggedIn(true);
+      setShowOpenCashModal(false);
+      setMontoApertura("");
+    };
+
     return (
-      <div style={{ width: "100vw", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)" }}>
-        <div style={{ background: "white", padding: "32px", borderRadius: "12px", width: "100%", maxWidth: "400px" }}>
+      <div style={{ width: "100vw", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#190C30" }}>
+        <div style={{ background: "white", padding: "32px", borderRadius: "12px", width: "100%", maxWidth: "420px", boxShadow: "0 10px 40px rgba(0,0,0,0.3)" }}>
           <h2 style={{ marginTop: 0, textAlign: "center", color: "#1f2937" }}>💵 Apertura de Caja</h2>
-          <p style={{ textAlign: "center", color: "#6b7280", marginBottom: "24px" }}>Ingresa el monto con el que inicias tu turno hoy.</p>
-          <form onSubmit={handleOpenCash} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <p style={{ textAlign: "center", color: "#6b7280", marginBottom: "24px", fontSize: "14px" }}>
+            Ingresa el monto con el que inicias tu turno hoy{esAdmin ? ", o entra en modo administración si no vas a cobrar en caja." : "."}
+          </p>
+          <form onSubmit={handleOpenCash} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
             <div>
               <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", fontWeight: 600, color: "#374151" }}>Monto inicial en caja *</label>
               <input type="number" step="0.01" min="0" value={montoApertura} onChange={(e) => setMontoApertura(e.target.value)} required placeholder="0.00" style={{ width: "100%", padding: "12px", border: "1px solid #d1d5db", borderRadius: "8px", fontSize: "16px", boxSizing: "border-box" }} />
             </div>
-            <button type="submit" disabled={loadingCaja} style={{ width: "100%", padding: "14px", background: loadingCaja ? "#9ca3af" : "#10b981", color: "white", border: "none", borderRadius: "8px", fontSize: "16px", fontWeight: 600, cursor: "pointer" }}>
-              {loadingCaja ? "Procesando..." : "Iniciar Turno"}
+            <button type="submit" disabled={loadingCaja} style={{ width: "100%", padding: "14px", background: loadingCaja ? "#9ca3af" : "#10b981", color: "white", border: "none", borderRadius: "8px", fontSize: "15px", fontWeight: 600, cursor: "pointer" }}>
+              {loadingCaja ? "Procesando..." : "Iniciar Turno con Caja"}
             </button>
+
+            {esAdmin && (
+              <button
+                type="button"
+                onClick={handleSkipCashAdmin}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  background: "#f3f4f6",
+                  color: "#374151",
+                  border: "1px solid #d1d5db",
+                  borderRadius: "8px",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Entrar sin abrir caja (Modo Administración)
+              </button>
+            )}
           </form>
         </div>
       </div>
@@ -113,6 +149,7 @@ export default function App() {
   }
 
   const cerrarSesionDirecto = () => {
+    localStorage.removeItem("caja_activa");
     localStorage.removeItem("caja_inicial");
     localStorage.removeItem("fecha_apertura");
     localStorage.removeItem("user");
@@ -124,8 +161,10 @@ export default function App() {
 
   const solicitarCierre = async () => {
     const u = getUsuarioActual();
-    // Si el rol no maneja caja (ej. Contador), cerrar sesión directamente
-    if (!tienePermisoModulo(u, "nueva-venta")) {
+    const cajaActiva = localStorage.getItem("caja_activa") === "true";
+
+    // Si no abrió turno de caja (ej. Contador o Administrador en Modo Administración), cerrar sesión directo
+    if (!tienePermisoModulo(u, "nueva-venta") || !cajaActiva) {
       cerrarSesionDirecto();
       return;
     }
